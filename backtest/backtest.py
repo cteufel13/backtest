@@ -82,7 +82,7 @@ class Backtest:
     
     def get_data(self):
         self.data = self.datatretriever.get_data(self.tickers)
-
+        return self.data
 
 
     def get_tickers(self,tickers=Union[str,List[str]], sector:str =None):
