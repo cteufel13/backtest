@@ -28,55 +28,50 @@ class Frontend:
         self.app.layout = html.Div([
 
             html.H1('Stock Price Dashboard', className='header-title'),
-
-
-            # Left Container
-            html.Div([
-
-                # Dropdowns Container
-                html.Div([ 
-                    #Dropdown 1 : Stock selection
-                    html.Div([
-                        dcc.Dropdown(
-                            id='dropdown',
-                            options=[{'label': i, 'value': i} for i in self.stocks],
-                            value='MSFT'
-                        )
-                    ], 
-                    className='dropdown-container',),
-                    
-                    #Dropdown 2 : Sector selection
-                    html.Div([
-                        dcc.Dropdown(
-                            id='sector-dropdown',
-                            options=[{'label': i, 'value': i} for i in self.sectors],
-                            value='Technology'
-                        )
-                    ],
-                    className='dropdown-container',),
-
-                ], className='dropdown-top-container'),
-
-                # Main Graph
+                # Main Container
                 html.Div([
-                    dcc.Graph(id='main-graph')
-                ], className='main-graph-container'),
+                # Left Container
+                    html.Div([
+
+                        # Dropdowns Container
+                        html.Div([ 
+                            #Dropdown 1 : Stock selection
+                            html.Div([
+                                dcc.Dropdown(
+                                    id='dropdown',
+                                    options=[{'label': i, 'value': i} for i in self.stocks],
+                                    value='MSFT',
+                                    style={'fontFamily': 'Arial'}
+                                )
+                            ], 
+                            className='dropdown-container',),
+                            
+                            #Dropdown 2 : Sector selection
+                            html.Div([
+                                dcc.Dropdown(
+                                    id='sector-dropdown',
+                                    options=[{'label': i, 'value': i} for i in self.sectors],
+                                    value='Technology',
+                                    style={'fontFamily': 'Arial'}
+                                )
+                            ],
+                            className='dropdown-container',),
+
+                        ], className='dropdown-top-container'),
+
+                        # Main Graph
+                        html.Div([
+                            dcc.Graph(id='main-graph')
+                        ], className='main-graph-container'),
 
 
-            ],className='main-left-container'),
+                    ],className='main-left-container'),
+                    # Right Container
+                    html.Div([ 
+                       
+                    ], className='main-right-container'),
 
-            html.Div([ 
-                
-            ], className='main-right-container'),
-
-            
-
-            # Secondary Graphs
-            html.Div([
-                dcc.Graph(id='secondary-graphs')
-            ], className='secondary-graph-container'),
-
-
+                ],className='main-container'),        
             #Some Selection on the bottom maybe later news feeds?    
 
         ])
@@ -100,3 +95,4 @@ class Frontend:
         self.sectors = sectors
 
     
+    """" ISSUES SO FAR, if selecting no stock then error appear, need to fix that,"""
