@@ -1,22 +1,25 @@
 from backtest.utils.position import Position
-from backtest.utils.dataretriever import YahooDataRetriever
+from backtest.utils.dataretriever import DataRetriever
 from backtest.core.strategy import Strategy
+
 
 import pandas as pd
 import numpy as np
+from typing import Union, List
+
 
 class Backtest:
-    def __init__(self, tickers, initial_capital=10000, commission=0.001, slippage=0.0, stop_loss_pct=0.02):
+    def __init__(self, initial_capital=10000, commission=0.001, slippage=0.0, stop_loss_pct=0.02,duration=365*10, start_date=None, end_date=None, interval='1h'):
 
-
-        self.data = None
-        self.tickers = tickers  # List of tickers or sectors
+        self.datatretriever = DataRetriever(duration=duration, start_date=start_date, end_date=end_date, interval=interval)
+        self.tickers = None  # List of tickers or sectors
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.commission = commission
         self.slippage = slippage
         self.stop_loss_pct = stop_loss_pct  # Percentage for stop loss (default 2%)
-        self.positions = {ticker: Position() for ticker in tickers}  # Dictionary of positions for each ticker
+        self.positions = None
+        self.data = None
         self.orders = []  # Orders executed during the backtest
         self.results = pd.DataFrame(columns=["Date", "Capital", "Cash", "Equity", "Portfolio Value"])
 
@@ -37,8 +40,11 @@ class Backtest:
                 self.capital += proceeds
                 self.orders.append({'type': 'sell', 'price': price, 'amount': amount, 'ticker': ticker})
 
-    def run_backtest(self,strategy:Strategy):
+    def run_backtest(self,strategy:Strategy,tickers:Union[str,List[str]], sector:str =None):
 
+        self.get_tickers()
+        self.positions = {ticker: Position() for ticker in self.tickers}  # Dictionary of positions for each ticker
+        self.get_data()
 
         for idx, row in self.data.iterrows():
             # Check for stop loss violation for each ticker
@@ -74,11 +80,21 @@ class Backtest:
             yield result_entry
 
     
-    def get_data(self, data):
-        self.data = data
+    def get_data(self):
+        self.data = self.datatretriever.get_data(self.tickers)
 
 
 
+    def get_tickers(self,tickers=Union[str,List[str]], sector:str =None):
+        if sector is not None:
+            self.tickers = self.datatretriever.get_sector_tickers(sector)
+        elif tickers is not None and isinstance(tickers, str): 
+            self.tickers = [tickers]
+        elif tickers is not None and isinstance(tickers, list):
+            self.tickers = tickers
+        else:
+            raise ValueError("Please provide either tickers or sector")
+    
 
     def performance_metrics(self):
         """
