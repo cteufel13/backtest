@@ -29,8 +29,7 @@ class Backtest:
         self.data = None
         self.orders = []  # Orders executed during the backtest
         self.results = pd.DataFrame(columns=["Date", "Capital", "Cash", "Equity", "Portfolio Value"])
-        self._stop_event = threading.Event()
-        self.update_interval = 0.01  # 10 milliseconds
+
 
 
     def execute_order(self, order_type, price, amount, ticker):
@@ -56,8 +55,7 @@ class Backtest:
         last_update_time = time.time()
 
         for date in all_dates:
-            if self._stop_event.is_set():
-                break
+
 
             total_value = 0
             for ticker in self.tickers:
@@ -90,10 +88,7 @@ class Backtest:
             self.results = pd.concat([self.results, pd.DataFrame([result_entry])], ignore_index=True)
             
             # Control update timing
-            current_time = time.time()
-            if current_time - last_update_time >= self.update_interval:
-                yield result_entry, self.positions
-                last_update_time = current_time
+            yield result_entry, self.positions
         
 
     
@@ -126,13 +121,10 @@ class Backtest:
     def update_visualizer(self, strategy, tickers, sector):
         try:
             for result, _ in self.run_backtest(strategy, tickers, sector):
-                if self._stop_event.is_set():
-                    break
                 self.visualizer.update_data(result)
         except Exception as e:
             print(f"Error in update_visualizer: {e}")
-        finally:
-            self._stop_event.clear()
+        
 
     def run(self, strategy, tickers, sector=None):
         """Runs the backtest and starts the frontend visualization."""
@@ -149,16 +141,9 @@ class Backtest:
 
         print('Frontend Running')
 
-        update_thread = threading.Thread(target=self.update_visualizer, args=(strategy, tickers, sector))
-        update_thread.daemon = True  # New line
-        update_thread.start()
-        
-        while True:
-            time.sleep(1)
+        self.update_visualizer(strategy, tickers, sector)
 
-    def stop(self):
-        self._stop_event.set()
-        self.visualizer.stop()
+
 
         
         
