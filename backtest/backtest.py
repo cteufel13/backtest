@@ -16,7 +16,6 @@ class Backtest:
 
         self.datatretriever = DataRetriever(duration=duration, start_date=start_date, end_date=end_date, interval=interval)
         self.visualizer = Frontend()
-        self.flag_running = False
       
 
         self.tickers = None  # List of tickers or sectors
@@ -108,23 +107,28 @@ class Backtest:
             raise ValueError("Please provide either tickers or sector")
     
 
-    def performance_metrics(self):
-        """
-        Compute performance metrics like total return, Sharpe ratio, etc.
-        """
-        total_return = (self.results['Portfolio Value'].iloc[-1] / self.results['Portfolio Value'].iloc[0]) - 1
-        print(f"Total Return: {total_return * 100:.2f}%")
+    # def performance_metrics(self):
+    #     """
+    #     Compute performance metrics like total return, Sharpe ratio, etc.
+    #     """
+    #     total_return = (self.results['Portfolio Value'].iloc[-1] / self.results['Portfolio Value'].iloc[0]) - 1
+    #     print(f"Total Return: {total_return * 100:.2f}%")
         
-        # More metrics can be added here (Sharpe, Sortino, etc.)
+    #     # More metrics can be added here (Sharpe, Sortino, etc.)
 
 
-    def update_visualizer(self, strategy, tickers, sector):
-        try:
-            for result, _ in self.run_backtest(strategy, tickers, sector):
-                self.visualizer.update_data(result)
-        except Exception as e:
-            print(f"Error in update_visualizer: {e}")
-        
+
+    def t_get_data(self,strategy, tickers, sector):
+
+        results = {stock: pd.DataFrame(columns=['Date', 'Price']).set_index("Date") for stock in tickers}
+
+        for result, _ in self.run_backtest(strategy, tickers, sector):
+            for stock in tickers:
+                results[stock].loc[result['Date'], 'Price'] = result['Stock Prices'][stock]
+
+        print('Results:',results['AAPL'].head())
+        return results
+
 
     def run(self, strategy, tickers, sector=None):
         """Runs the backtest and starts the frontend visualization."""
@@ -135,13 +139,17 @@ class Backtest:
 
         print('Starting Frontend...')
         self.visualizer.update_stocks(self.tickers)
+        results = self.t_get_data(strategy, self.tickers, sector)
+        print(results)
+
+        self.visualizer.update_data(results)
+
+
+        self.visualizer.run() 
+
+        # print('Frontend Running')
+
         
-        if not self.visualizer.server_thread:  # Prevent duplicate runs
-            self.visualizer.run()  # Runs in a separate thread
-
-        print('Frontend Running')
-
-        self.update_visualizer(strategy, tickers, sector)
 
 
 
