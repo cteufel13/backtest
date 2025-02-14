@@ -12,11 +12,12 @@ class Position():
         self.stop_loss = stop_loss
     
     def buy(self,price,amount,comission,stop_loss=None):
-
         self.size += amount
         self.entry_price = price
         self.capital_invested = self.size * self.entry_price*(1+comission)
         self.stop_loss = stop_loss
+        if self.highest_price is None:
+            self.highest_price = price
         self.highest_price = max(self.highest_price,self.entry_price)
 
     def sell(self,price,amount,comission):

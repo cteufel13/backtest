@@ -1,7 +1,10 @@
 from backtest.utils.position import Position
 from backtest.utils.dataretriever import DataRetriever
+from backtest.frontend import Frontend
 from backtest.core.strategy import Strategy
-
+from backtest.core.action import Action
+import threading
+import time
 
 import pandas as pd
 import numpy as np
@@ -12,6 +15,10 @@ class Backtest:
     def __init__(self, initial_capital=10000, commission=0.001, slippage=0.0, stop_loss_pct=0.02,duration=365*10, start_date=None, end_date=None, interval='1h'):
 
         self.datatretriever = DataRetriever(duration=duration, start_date=start_date, end_date=end_date, interval=interval)
+        self.visualizer = Frontend()
+        self.flag_running = False
+      
+
         self.tickers = None  # List of tickers or sectors
         self.initial_capital = initial_capital
         self.capital = initial_capital
@@ -22,15 +29,19 @@ class Backtest:
         self.data = None
         self.orders = []  # Orders executed during the backtest
         self.results = pd.DataFrame(columns=["Date", "Capital", "Cash", "Equity", "Portfolio Value"])
+        self._stop_event = threading.Event()
+        self.update_interval = 0.01  # 10 milliseconds
+
 
     def execute_order(self, order_type, price, amount, ticker):
-
         slippage_adjustment = price * self.slippage
         if order_type == 'buy':
             price += slippage_adjustment  # Apply slippage to buy price
+
             if self.capital >= price * amount:
                 stop_loss_price = price * (1 - self.stop_loss_pct)
                 self.positions[ticker].buy(price, amount, self.commission, stop_loss=stop_loss_price)
+                
                 self.capital -= price * amount * (1 + self.commission)
                 self.orders.append({'type': 'buy', 'price': price, 'amount': amount, 'ticker': ticker, 'stop_loss': stop_loss_price})
         elif order_type == 'sell':
@@ -40,44 +51,50 @@ class Backtest:
                 self.capital += proceeds
                 self.orders.append({'type': 'sell', 'price': price, 'amount': amount, 'ticker': ticker})
 
-    def run_backtest(self,strategy:Strategy,tickers:Union[str,List[str]], sector:str =None):
+    def run_backtest(self, strategy: Strategy, tickers: Union[str, List[str]], sector: str = None):
+        all_dates = self.data[self.tickers[0]].index
+        last_update_time = time.time()
 
-        self.get_tickers()
-        self.positions = {ticker: Position() for ticker in self.tickers}  # Dictionary of positions for each ticker
-        self.get_data()
+        for date in all_dates:
+            if self._stop_event.is_set():
+                break
 
-        for idx, row in self.data.iterrows():
-            # Check for stop loss violation for each ticker
+            total_value = 0
             for ticker in self.tickers:
+                row = self.data[ticker].loc[date]
+                current_price = row['Close']
+
                 if self.positions[ticker].is_open():
-                    # Check if the current price hits the stop loss
-                    if row[ticker] <= self.positions[ticker].stop_loss:
-                        print(f"Stop loss hit for {ticker} at {row['Date']} for price {row[ticker]}")
-                        self.execute_order('sell', row[ticker], self.positions[ticker].size, ticker)  # Close the position
-                    self.positions[ticker].update_trailing_stop(row[ticker], trailing_stop_pct=0.05)  # 5% trailing stop
+                    if current_price <= self.positions[ticker].stop_loss:
+                        self.execute_order('sell', current_price, self.positions[ticker].size, ticker)
+                    self.positions[ticker].update_stop_loss(current_price, trailing_stop_pct=0.05)
 
-            for ticker in self.tickers:
-                action = strategy.get_action(row, ticker)  # Get strategy action for each ticker
-                if action == 'buy':
-                    self.execute_order('buy', row[ticker], amount=1, ticker=ticker)  # Buying 1 unit
-                elif action == 'sell':
-                    self.execute_order('sell', row[ticker], amount=1, ticker=ticker)  # Selling 1 unit
-            
-            # Track portfolio status (total capital + value of all positions)
-            total_value = sum([self.positions[ticker].get_value(row[ticker]) for ticker in self.tickers])
+                action = strategy.get_action(row, ticker, self.positions)
+                if action.type == 'buy':
+                    self.execute_order('buy', current_price, action.amount, ticker)
+                elif action.type == 'sell':
+                    self.execute_order('sell', current_price, action.amount, ticker)
+
+                total_value += self.positions[ticker].get_value(current_price)
+
             equity = self.capital + total_value
-
             result_entry = {
-                "Date": row['Date'],
+                "Date": date,
                 "Capital": self.initial_capital,
                 "Cash": self.capital,
                 "Equity": equity,
-                "Portfolio Value": equity
+                "Portfolio Value": equity,
+                "Stock Prices": {ticker: self.data[ticker].loc[date]['Close'] for ticker in self.tickers}
             }
 
-            self.results = self.results.append(result_entry, ignore_index=True)
-
-            yield result_entry
+            self.results = pd.concat([self.results, pd.DataFrame([result_entry])], ignore_index=True)
+            
+            # Control update timing
+            current_time = time.time()
+            if current_time - last_update_time >= self.update_interval:
+                yield result_entry, self.positions
+                last_update_time = current_time
+        
 
     
     def get_data(self):
@@ -105,4 +122,45 @@ class Backtest:
         
         # More metrics can be added here (Sharpe, Sortino, etc.)
 
-    
+
+    def update_visualizer(self, strategy, tickers, sector):
+        try:
+            for result, _ in self.run_backtest(strategy, tickers, sector):
+                if self._stop_event.is_set():
+                    break
+                self.visualizer.update_data(result)
+        except Exception as e:
+            print(f"Error in update_visualizer: {e}")
+        finally:
+            self._stop_event.clear()
+
+    def run(self, strategy, tickers, sector=None):
+        """Runs the backtest and starts the frontend visualization."""
+        
+        self.get_tickers(tickers=tickers, sector=sector)
+        self.positions = {ticker: Position(size=0, entry_price=None, stop_loss=None) for ticker in self.tickers}
+        self.get_data()
+
+        print('Starting Frontend...')
+        self.visualizer.update_stocks(self.tickers)
+        
+        if not self.visualizer.server_thread:  # Prevent duplicate runs
+            self.visualizer.run()  # Runs in a separate thread
+
+        print('Frontend Running')
+
+        update_thread = threading.Thread(target=self.update_visualizer, args=(strategy, tickers, sector))
+        update_thread.daemon = True  # New line
+        update_thread.start()
+        
+        while True:
+            time.sleep(1)
+
+    def stop(self):
+        self._stop_event.set()
+        self.visualizer.stop()
+
+        
+        
+
+

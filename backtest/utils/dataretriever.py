@@ -35,7 +35,6 @@ class DataRetriever:
             raise ValueError("Please provide either ticker or sector")
         
         for ticker in tickers:
-            print('hello',ticker)
             ticker_data = self.get_ticker_data(ticker)
             data[ticker] = ticker_data
 
@@ -50,7 +49,6 @@ class DataRetriever:
 
 
     def get_ticker_data(self,id )-> pd.DataFrame:
-        print(id)
         ticker = yf.Ticker(id)
         try:
             data = ticker.history(start=self.start_date, end=self.end_date, interval=self.interval,raise_errors=True) 
@@ -59,4 +57,5 @@ class DataRetriever:
             
             data = ticker.history(period = 'max', interval=self.interval)
             # print(data)
+        # print(data.head())
         return data
