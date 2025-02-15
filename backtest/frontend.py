@@ -11,7 +11,7 @@ class Frontend:
         self.stocks = stocks if stocks else ['GOOG']
         self.sectors = sectors if sectors else ['Technology', 'Healthcare', 'Finance']
         self.stock_data = {stock: pd.DataFrame(columns=["Date", "Price"]).set_index("Date") for stock in self.stocks}
-
+        self.action_data = {stock: pd.DataFrame(columns=["Date", "Action"]).set_index("Date") for stock in self.stocks}
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
         self.server_thread = None
         self._setup_layout()
@@ -72,6 +72,7 @@ class Frontend:
         for stock in self.stocks:
             if stock not in self.stock_data:
                 self.stock_data[stock] = pd.DataFrame(columns=["Date", "Price"]).set_index("Date")
+                self.action_data[stock] = pd.DataFrame(columns=["Date", "Action", "IdPrice","StopLoss"]).set_index("Date")
 
 
     def update_dropdown_options(self,stocks):
@@ -83,9 +84,14 @@ class Frontend:
     def update_data(self, data_row):
             for stock in self.stocks:
                     self.stock_data[stock].loc[data_row['Date'],'Price'] = data_row['Stock Prices'][stock]
-            return self.stock_data
-
-       
+                    action_obj = data_row['Action'][stock]  # This is an Action instance
+                    self.action_data[stock].loc[data_row['Date'], 'Action'] = action_obj.type
+                    self.action_data[stock].loc[data_row['Date'], 'Amount'] = int(action_obj.amount)
+                    self.action_data[stock].loc[data_row['Date'], 'IdPrice'] = data_row['Stock Prices'][stock]
+                    if action_obj.stop_loss is not None:
+                        self.action_data[stock].loc[data_row['Date'], 'StopLoss'] = float(action_obj.stop_loss)
+                    else:
+                        self.action_data[stock].loc[data_row['Date'], 'StopLoss'] = None
     def update_graph(self,selected_stocks,n_intervals):
 
         if isinstance(selected_stocks, str):
@@ -95,4 +101,31 @@ class Frontend:
         for selected_stock in selected_stocks:
             df = self.stock_data[selected_stock]
             fig.add_scatter(x=df.index, y=df['Price'], mode='lines', name=selected_stock)
+            actions_df = self.action_data[selected_stock]
+            buys = actions_df[actions_df['Action'] == 'buy']
+            
+            if not buys.empty:
+                fig.add_scatter(
+                    x=buys.index,
+                    y=buys['IdPrice'],
+                    mode='markers',
+                    marker=dict(symbol='triangle-up', size=10, color='green'),
+                    name=f"{selected_stock} Buys",
+                    text=[f"Stop Loss: {sl}" for sl in buys['StopLoss']],
+                    hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>"
+                )
+            
+            # Filter for sell actions.
+            sells = actions_df[actions_df['Action'] == 'sell']
+            if not sells.empty:
+                fig.add_scatter(
+                    x=sells.index,
+                    y=sells['IdPrice'],
+                    mode='markers',
+                    marker=dict(symbol='triangle-down', size=10, color='red'),
+                    name=f"{selected_stock} Sells",
+                    text=[f"Stop Loss: {sl}" for sl in sells['StopLoss']],
+                    hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>"
+                )
+            
         return fig

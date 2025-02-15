@@ -53,13 +53,16 @@ class Backtest:
 
         all_dates = self.data[tickers[0]].index
 
-        common_index = None
         # Compute the intersection of all indexes.
-        
+        for ticker in self.tickers:
+            all_dates = all_dates.intersection(self.data[ticker].index)
 
         for date in all_dates:
 
             total_value = 0
+
+            actions = {}
+
             for ticker in self.tickers:
                 row = self.data[ticker].loc[date]
                 current_price = row['Close']
@@ -70,6 +73,7 @@ class Backtest:
                     self.positions[ticker].update_stop_loss(current_price, trailing_stop_pct=0.05)
 
                 action = strategy.get_action(row, ticker, self.positions)
+                actions[ticker] = action
                 if action.type == 'buy':
                     self.execute_order('buy', current_price, action.amount, ticker)
                 elif action.type == 'sell':
@@ -78,12 +82,14 @@ class Backtest:
                 total_value += self.positions[ticker].get_value(current_price)
 
             equity = self.capital + total_value
+            # print(actions)
             result_entry = {
                 "Date": date,
                 "Capital": self.initial_capital,
                 "Cash": self.capital,
                 "Equity": equity,
                 "Portfolio Value": equity,
+                "Action": actions,
                 "Stock Prices": {ticker: self.data[ticker].loc[date]['Close'] for ticker in self.tickers}
             }
 
@@ -109,17 +115,6 @@ class Backtest:
         else:
             raise ValueError("Please provide either tickers or sector")
     
-
-    # def performance_metrics(self):
-    #     """
-    #     Compute performance metrics like total return, Sharpe ratio, etc.
-    #     """
-    #     total_return = (self.results['Portfolio Value'].iloc[-1] / self.results['Portfolio Value'].iloc[0]) - 1
-    #     print(f"Total Return: {total_return * 100:.2f}%")
-        
-    #     # More metrics can be added here (Sharpe, Sortino, etc.)
-
-
     def main_thread(self, strategy, tickers, sector):
         for result, _ in self.run_backtest(strategy, tickers, sector):
             # print(result)

@@ -50,12 +50,14 @@ class DataRetriever:
 
     def get_ticker_data(self,id )-> pd.DataFrame:
         ticker = yf.Ticker(id)
+        data = pd.DataFrame()
         try:
             data = ticker.history(start=self.start_date, end=self.end_date, interval=self.interval,raise_errors=True) 
         except Exception as e:
             print('Set Duration to Max')
-            
-            data = ticker.history(period = 'max', interval=self.interval)
+            while data.empty:
+                print('Trying Again')
+                data = ticker.history(period = 'max', interval=self.interval)
             # print(data)
         # print(data.head())
         return data
