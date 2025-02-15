@@ -10,26 +10,38 @@ class Frontend:
     def __init__(self, stocks=None, sectors=None):
         self.stocks = stocks if stocks else ['GOOG']
         self.sectors = sectors if sectors else ['Technology', 'Healthcare', 'Finance']
-        # Each stock's data is a DataFrame indexed by Date with a Price column.
         self.stock_data = {stock: pd.DataFrame(columns=["Date", "Price"]).set_index("Date") for stock in self.stocks}
+
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
         self.server_thread = None
-
+        self._setup_layout()
+        self._setup_callbacks()
 
     def _setup_callbacks(self):
-
-
-        # Callback 4: Update the graph based on the selected stock.
-        @self.app.callback(
+        
+        self.app.callback(
             Output('main-graph', 'figure'),
             Input('dropdown', 'value'),
-        )
-        def update_graph(selected_stock):
-            df = self.stock_data[selected_stock]
-            print('df:',df)
+            Input('interval-update', 'n_intervals')
+        ) (self.update_graph)
+         
 
-            fig = px.line(df, x=df.index, y='Price', title=f'{selected_stock} Close Price')
-            return fig
+       
+    def update_data(self, data_row):
+            for stock in self.stocks:
+                    self.stock_data[stock].loc[data_row['Date'],'Price'] = data_row['Stock Prices'][stock]
+            return self.stock_data
+
+       
+    def update_graph(self,selected_stock,n_intervals):
+        print('n_intervals:',n_intervals)
+        print("update_graph called with:", selected_stock)  # This confirms the callback is executing.
+        df = self.stock_data[selected_stock]
+        print('DataFrame for', selected_stock, ':', df)
+        fig = px.line(df, x=df.index, y='Price', title=f'{selected_stock} Close Price')
+        return fig
+        
+        
 
     def _setup_layout(self):
 
@@ -39,35 +51,30 @@ class Frontend:
                 dcc.Dropdown(
                     id='dropdown',
                     options=[{'label': stock, 'value': stock} for stock in self.stocks],
-                    value=None,
+                    value=self.stocks[0],
                     style={'fontFamily': 'Arial'}
                 )
             ], className='dropdown-container'),
             html.Div([
-                dcc.Graph(id='main-graph')
+                dcc.Graph(id='main-graph'),
+                dcc.Interval(
+                    id='interval-update',
+                    interval=1000, # in milliseconds
+                    n_intervals=0)
             ], className='main-graph-container'),
-            dcc.Interval(id='interval-update', interval=500, n_intervals=0)
         ])
         self.app.layout = layout
 
-        
-
     def run(self):
-        self._setup_layout()
-        self._setup_callbacks()
+        print('running server   ---------------')
         self.app.run_server()
 
     
     def update_stocks(self, stocks):
-        """Update the list of stocks and initialize their data structures."""
         self.stocks = stocks
         for stock in self.stocks:
             if stock not in self.stock_data:
                 self.stock_data[stock] = pd.DataFrame(columns=["Date", "Price"]).set_index("Date")
-
-    def update_data(self, data):
-        self.stock_data = data
-        print(self.stock_data)
         
 
 if __name__ == '__main__':

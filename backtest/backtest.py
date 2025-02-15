@@ -50,11 +50,14 @@ class Backtest:
                 self.orders.append({'type': 'sell', 'price': price, 'amount': amount, 'ticker': ticker})
 
     def run_backtest(self, strategy: Strategy, tickers: Union[str, List[str]], sector: str = None):
-        all_dates = self.data[self.tickers[0]].index
-        last_update_time = time.time()
+
+        all_dates = self.data[tickers[0]].index
+
+        common_index = None
+        # Compute the intersection of all indexes.
+        
 
         for date in all_dates:
-
 
             total_value = 0
             for ticker in self.tickers:
@@ -118,16 +121,19 @@ class Backtest:
 
 
 
-    def t_get_data(self,strategy, tickers, sector):
+    # def pass_data_visualiser(self,strategy, tickers, sector):
 
-        results = {stock: pd.DataFrame(columns=['Date', 'Price']).set_index("Date") for stock in tickers}
+    #     results = {stock: pd.DataFrame(columns=['Date', 'Price']).set_index("Date") for stock in tickers}
 
+        
+    def main_thread(self, strategy, tickers, sector):
         for result, _ in self.run_backtest(strategy, tickers, sector):
-            for stock in tickers:
-                results[stock].loc[result['Date'], 'Price'] = result['Stock Prices'][stock]
+            # print(result)
+            self.visualizer.update_data(result)
 
-        print('Results:',results['AAPL'].head())
-        return results
+            time.sleep(0.1)
+
+        
 
 
     def run(self, strategy, tickers, sector=None):
@@ -137,18 +143,18 @@ class Backtest:
         self.positions = {ticker: Position(size=0, entry_price=None, stop_loss=None) for ticker in self.tickers}
         self.get_data()
 
-        print('Starting Frontend...')
         self.visualizer.update_stocks(self.tickers)
-        results = self.t_get_data(strategy, self.tickers, sector)
-        print(results)
 
-        self.visualizer.update_data(results)
+        backtest_thread = threading.Thread(target=self.main_thread, args=(strategy, tickers, sector))
+        backtest_thread.daemon = True
+        backtest_thread.start()
 
-
-        self.visualizer.run() 
-
-        # print('Frontend Running')
-
+        self.visualizer.run()
+        
+        
+        print('Starting Frontend...')
+        
+    
         
 
 

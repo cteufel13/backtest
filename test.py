@@ -8,4 +8,4 @@ backtest = Backtest(initial_capital=10000, commission=0.001, slippage=0.0, stop_
 strat = CustomStrategy()
 
 
-backtest.run(strategy=strat, tickers=['AAPL','GOOG'])
+backtest.run(strategy=strat, tickers=['AAPL','GOOG','MCFT']) 
