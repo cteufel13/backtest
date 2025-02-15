@@ -24,34 +24,31 @@ class Frontend:
             Input('dropdown', 'value'),
             Input('interval-update', 'n_intervals')
         ) (self.update_graph)
+
+        self.app.callback(
+            Output('dropdown', 'options'),
+            Input('stocks-store', 'data')
+        ) (self.update_dropdown_options)
+
+        self.app.callback(
+            Output('stocks-store', 'data'),
+            Input('once-interval', 'n_intervals'),
+            State('stocks-store', 'data')
+        )(self.update_store_once)
          
-
-       
-    def update_data(self, data_row):
-            for stock in self.stocks:
-                    self.stock_data[stock].loc[data_row['Date'],'Price'] = data_row['Stock Prices'][stock]
-            return self.stock_data
-
-       
-    def update_graph(self,selected_stock,n_intervals):
-        print('n_intervals:',n_intervals)
-        print("update_graph called with:", selected_stock)  # This confirms the callback is executing.
-        df = self.stock_data[selected_stock]
-        print('DataFrame for', selected_stock, ':', df)
-        fig = px.line(df, x=df.index, y='Price', title=f'{selected_stock} Close Price')
-        return fig
-        
-        
 
     def _setup_layout(self):
 
         layout = html.Div([
             html.H1('Stock Price Dashboard', className='header-title'),
+            dcc.Store(id='stocks-store', data=self.stocks),
+            dcc.Interval(id='once-interval', interval=1000, max_intervals=1),
             html.Div([
                 dcc.Dropdown(
                     id='dropdown',
                     options=[{'label': stock, 'value': stock} for stock in self.stocks],
                     value=self.stocks[0],
+                    multi=True,
                     style={'fontFamily': 'Arial'}
                 )
             ], className='dropdown-container'),
@@ -75,8 +72,27 @@ class Frontend:
         for stock in self.stocks:
             if stock not in self.stock_data:
                 self.stock_data[stock] = pd.DataFrame(columns=["Date", "Price"]).set_index("Date")
-        
 
-if __name__ == '__main__':
-    frontend = Frontend()
-    frontend.run()
+
+    def update_dropdown_options(self,stocks):
+        return [{'label': stock, 'value': stock} for stock in stocks]
+
+    def update_store_once(self, n_intervals, current_data):
+        return self.stocks
+    
+    def update_data(self, data_row):
+            for stock in self.stocks:
+                    self.stock_data[stock].loc[data_row['Date'],'Price'] = data_row['Stock Prices'][stock]
+            return self.stock_data
+
+       
+    def update_graph(self,selected_stocks,n_intervals):
+
+        if isinstance(selected_stocks, str):
+            selected_stocks = [selected_stocks]
+
+        fig = px.line()
+        for selected_stock in selected_stocks:
+            df = self.stock_data[selected_stock]
+            fig.add_scatter(x=df.index, y=df['Price'], mode='lines', name=selected_stock)
+        return fig

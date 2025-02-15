@@ -120,12 +120,6 @@ class Backtest:
     #     # More metrics can be added here (Sharpe, Sortino, etc.)
 
 
-
-    # def pass_data_visualiser(self,strategy, tickers, sector):
-
-    #     results = {stock: pd.DataFrame(columns=['Date', 'Price']).set_index("Date") for stock in tickers}
-
-        
     def main_thread(self, strategy, tickers, sector):
         for result, _ in self.run_backtest(strategy, tickers, sector):
             # print(result)
