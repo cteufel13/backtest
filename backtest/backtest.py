@@ -9,7 +9,7 @@ import time
 import pandas as pd
 import numpy as np
 from typing import Union, List
-
+import webbrowser
 
 class Backtest:
     def __init__(self, initial_capital=10000, commission=0.001, slippage=0.0, stop_loss_pct=0.02,duration=365*10, start_date=None, end_date=None, interval='1h'):
@@ -66,7 +66,6 @@ class Backtest:
             for ticker in self.tickers:
                 row = self.data[ticker].loc[date]
                 current_price = row['Close']
-
                 if self.positions[ticker].is_open():
                     if current_price <= self.positions[ticker].stop_loss:
                         self.execute_order('sell', current_price, self.positions[ticker].size, ticker)
@@ -90,7 +89,7 @@ class Backtest:
                 "Equity": equity,
                 "Portfolio Value": equity,
                 "Action": actions,
-                "Stock Prices": {ticker: self.data[ticker].loc[date]['Close'] for ticker in self.tickers}
+                "Stock Info": {ticker: self.data[ticker].loc[date] for ticker in self.tickers}
             }
 
             self.results = pd.concat([self.results, pd.DataFrame([result_entry])], ignore_index=True)
@@ -119,8 +118,7 @@ class Backtest:
         for result, _ in self.run_backtest(strategy, tickers, sector):
             # print(result)
             self.visualizer.update_data(result)
-
-            time.sleep(0.1)
+            time.sleep(0.5)
 
         
 
@@ -134,14 +132,19 @@ class Backtest:
 
         self.visualizer.update_stocks(self.tickers)
 
+        webbrowser.open('http://127.0.0.1:8050/')
+        time.sleep(1)
+
         backtest_thread = threading.Thread(target=self.main_thread, args=(strategy, tickers, sector))
         backtest_thread.daemon = True
         backtest_thread.start()
 
+        print('Starting Frontend...')
+
         self.visualizer.run()
         
         
-        print('Starting Frontend...')
+        
         
     
         
