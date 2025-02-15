@@ -13,7 +13,7 @@
 
 
 .dropdown-container {
-    width: 650px;
+    width: 950px;
     height: 50px;
     padding: 20px;
     display: flex;
@@ -28,7 +28,7 @@
 
 .main-graph .js-plotly-plot{
     max-width: 100%;
-    /* border: 1px soli d black; */
+    /* border: 1px solid black; */
     padding: 0;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .main-container {
-    /* border: 1px solid lightgreen; */
+    border: 1px solid lightgreen;
     display: flex;
 }
 

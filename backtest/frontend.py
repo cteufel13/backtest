@@ -3,6 +3,10 @@ from dash import dcc, html
 import plotly.express as px
 from dash.dependencies import Input, Output, State
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from backtest.utils.ta_indicators import *
+
 
 class Frontend:
 
@@ -12,7 +16,7 @@ class Frontend:
         self.stock_data = {stock: pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits"]).set_index("Date") for stock in self.stocks}
         self.action_data = {stock: pd.DataFrame(columns=["Date", "Action"]).set_index("Date") for stock in self.stocks}
         self.additional_data = pd.DataFrame(columns=["Date", "Capital","Cash","Equity","Portfolio Value"]).set_index("Date")
-        
+        self.ta_indicators = []
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
         self.server_thread = None
         self._setup_layout()
@@ -23,6 +27,7 @@ class Frontend:
         self.app.callback(
             Output('main-graph', 'figure'),
             Input('dropdown', 'value'),
+            Input('dropdown3', 'value'),
             Input('interval-update', 'n_intervals')
         ) (self.update_graph)
 
@@ -36,11 +41,6 @@ class Frontend:
             Input('once-interval', 'n_intervals'),
             State('stocks-store', 'data')
         )(self.update_store_once)
-
-        self.app.callback(
-            Output('additional-graph', 'figure'),
-            Input('interval-update', 'n_intervals')
-        )(self.update_additional_graph)
          
     def _setup_layout(self):
 
@@ -53,7 +53,7 @@ class Frontend:
                     id='dropdown',
                     options=[{'label': stock, 'value': stock} for stock in self.stocks],
                     value=self.stocks[0],
-                    multi=True,
+                    multi=False,
                     style={'fontFamily': 'Arial'},
                     className='dropdown-menu'
                 ),
@@ -75,8 +75,28 @@ class Frontend:
                     value = None,
                     style= {'fontFamily': 'Arial'},
                     className='dropdown-menu'
-                )
+                ),
+                dcc.Dropdown(
+                    id='dropdown3',
+                    options= [{'label':'Candlestick', 'value': 'candlestick'},
+                              {'label':'Line', 'value': 'line'},
+                              {'label':'Buy/Sell', 'value': 'buy/sell'},
+                              {'label':'Volume', 'value': 'volume'},
+                              {'label':'None', 'value': None}],
+                    value = 'line',
+                    style= {'fontFamily': 'Arial'},
+                    multi=True,
+                    className='dropdown-menu'
+                ),
             ], className='dropdown-container'),
+                dcc.Dropdown(
+                    id='dropdown4',
+                    options= [{'label':ta_indicator,'value':ta_indicator} for ta_indicator in self.ta_indicators],
+                    value = None,
+                    style= {'fontFamily': 'Arial'},
+                    multi=True,
+                    className='dropdown-menu'
+                ),
 
             html.Div([
                 html.Div([
@@ -88,10 +108,7 @@ class Frontend:
                             interval=220, # in milliseconds
                             n_intervals=0)
                     ], className='main-graph-container'),
-                    html.Div([
-                        dcc.Graph(id='additional-graph',
-                                className='additional-graph'),
-                    ], className='additional-graph-container')
+                    
                     ], className='left-container'),
                 html.Div([
                     html.H2 ('Actions', className='actions-title'),
@@ -136,57 +153,147 @@ class Frontend:
             self.additional_data.loc[data_row['Date'], 'Equity'] = data_row['Equity']
             self.additional_data.loc[data_row['Date'], 'Portfolio Value'] = data_row['Portfolio Value']
             
-    def update_graph(self,selected_stocks,n_intervals):
-
+    def update_graph(self, selected_stocks, selected_graphs, n_intervals):
+        # Handle the case where a single string is passed instead of a list
         if isinstance(selected_stocks, str):
             selected_stocks = [selected_stocks]
 
-        fig = px.line()
+        # Create a figure with 2 rows, 1 column, sharing the x-axis
+        fig = make_subplots(rows=2, 
+                            cols=1,
+                            shared_xaxes=True, 
+                            vertical_spacing=0.03,
+                            row_heights=[0.7, 0.3],
+                            specs=[[{"secondary_y": True}], [{}]]
+                            )
+
+        #
+        # 1) TOP SUBPLOT (row=1): Stocks + Candlestick + Buy/Sell
+        #
         for selected_stock in selected_stocks:
             df = self.stock_data[selected_stock]
-            fig.add_scatter(x=df.index, y=df['Close'], mode='lines', name=selected_stock)
-            fig.add_candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name=selected_stock)
-            fig.update_layout(
-                xaxis_rangeslider_visible=False
-            )
-            #buy/sell actions
 
-            actions_df = self.action_data[selected_stock]
-            buys = actions_df[actions_df['Action'] == 'buy']
-            if not buys.empty:
+            # If "line" is selected
+            if 'line' in selected_graphs:
                 fig.add_scatter(
-                    x=buys.index,
-                    y=buys['IdPrice'],
-                    mode='markers',
-                    marker=dict(symbol='triangle-up', size=10, color='green'),
-                    name=f"{selected_stock} Buys",
-                    text=[f"Stop Loss: {sl}" for sl in buys['StopLoss']],
-                    hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>"
-                )
-            
-            # Filter for sell actions.
-            sells = actions_df[actions_df['Action'] == 'sell']
-            if not sells.empty:
-                fig.add_scatter(
-                    x=sells.index,
-                    y=sells['IdPrice'],
-                    mode='markers',
-                    marker=dict(symbol='triangle-down', size=10, color='red'),
-                    name=f"{selected_stock} Sells",
-                    text=[f"Stop Loss: {sl}" for sl in sells['StopLoss']],
-                    hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>"
+                    x=df.index,
+                    y=df['Close'],
+                    mode='lines',
+                    name=f"{selected_stock} (Close)",
+                    row=1,
+                    col=1
                 )
 
-        
+            # If "candlestick" is selected
+            if 'candlestick' in selected_graphs:
+                fig.add_candlestick(
+                    x=df.index,
+                    open=df['Open'],
+                    high=df['High'],
+                    low=df['Low'],
+                    close=df['Close'],
+                    name=f"{selected_stock} (Candlestick)",
+                    row=1,
+                    col=1
+                )
+
+            # If "buy/sell" is selected
+            if 'buy/sell' in selected_graphs:
+                actions_df = self.action_data[selected_stock]
+
+                # Buys
+                buys = actions_df[actions_df['Action'] == 'buy']
+                if not buys.empty:
+                    fig.add_scatter(
+                        x=buys.index,
+                        y=buys['IdPrice'],
+                        mode='markers',
+                        marker=dict(symbol='triangle-up', size=10, color='green'),
+                        name=f"{selected_stock} Buys",
+                        text=[f"Stop Loss: {sl}" for sl in buys['StopLoss']],
+                        hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>",
+                        row=1,
+                        col=1
+                    )
+
+                # Sells
+                sells = actions_df[actions_df['Action'] == 'sell']
+                if not sells.empty:
+                    fig.add_scatter(
+                        x=sells.index,
+                        y=sells['IdPrice'],
+                        mode='markers',
+                        marker=dict(symbol='triangle-down', size=10, color='red'),
+                        name=f"{selected_stock} Sells",
+                        text=[f"Stop Loss: {sl}" for sl in sells['StopLoss']],
+                        hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>",
+                        row=1,
+                        col=1
+                    )
+            if 'volume' in selected_graphs:
+                colors = ['green' if c >= o else 'red' 
+                      for c, o in zip(df['Close'], df['Open'])]
+                fig.add_bar(
+                    x=df.index,
+                    y=df['Volume'],
+                    name=f"{selected_stock} Volume",
+                    opacity=0.9,
+                    marker_color=colors,
+                    row=1,
+                    col=1,
+                    secondary_y=True
+                )
+                fig.update_yaxes(title_text="Volume", secondary_y=True, showgrid=False, rangemode='tozero')
+
+
+        #
+        # 2) BOTTOM SUBPLOT (row=2): Additional Data
+        #
+        df_add = self.additional_data
+
+        fig.add_scatter(
+            x=df_add.index,
+            y=df_add['Capital'],
+            mode='lines',
+            name='Capital',
+            row=2,
+            col=1
+        )
+        fig.add_scatter(
+            x=df_add.index,
+            y=df_add['Cash'],
+            mode='lines',
+            name='Cash',
+            row=2,
+            col=1
+        )
+        fig.add_scatter(
+            x=df_add.index,
+            y=df_add['Equity'],
+            mode='lines',
+            name='Equity',
+            row=2,
+            col=1
+        )
+        fig.add_scatter(
+            x=df_add.index,
+            y=df_add['Portfolio Value'],
+            mode='lines',
+            name='Portfolio Value',
+            row=2,
+            col=1
+        )
+
+        # Update overall figure layout
+        fig.update_yaxes(title_text="Price", secondary_y=False)
+
+        fig.update_layout(
+            xaxis_rangeslider_visible=False,  # Hide the rangeslider if you don't want it
+            legend=dict(
+                itemclick=False,
+                itemdoubleclick=False
+            ),
+            height=800,
+        )
+
         return fig
-
-    def update_additional_graph(self,n_intervals):
-            fig = px.line()
-            df = self.additional_data
-
-            fig.add_scatter(x=df.index, y=df['Capital'], mode='lines', name='Capital')
-            fig.add_scatter(x=df.index, y=df['Cash'], mode='lines', name='Cash')
-            fig.add_scatter(x=df.index, y=df['Equity'], mode='lines', name='Equity')
-            fig.add_scatter(x=df.index, y=df['Portfolio Value'], mode='lines', name='Portfolio Value')
-
-            return fig

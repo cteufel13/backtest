@@ -10,4 +10,3 @@ strat = CustomStrategy()
 
 backtest.run(strategy=strat, tickers=['AAPL','GOOG','MCFT']) 
 
-## test if passing whole
