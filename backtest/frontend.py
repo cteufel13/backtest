@@ -13,10 +13,10 @@ class Frontend:
     def __init__(self, stocks=None, sectors=None):
         self.stocks = stocks if stocks else ['GOOG']
         self.sectors = sectors if sectors else ['Technology', 'Healthcare', 'Finance']
-        self.stock_data = {stock: pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits"]).set_index("Date") for stock in self.stocks}
+        self.stock_data = {stock: pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits",]).set_index("Date") for stock in self.stocks}
         self.action_data = {stock: pd.DataFrame(columns=["Date", "Action"]).set_index("Date") for stock in self.stocks}
         self.additional_data = pd.DataFrame(columns=["Date", "Capital","Cash","Equity","Portfolio Value"]).set_index("Date")
-        self.ta_indicators = []
+        self.ta_indicator_info = []
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
         self.server_thread = None
         self._setup_layout()
@@ -28,6 +28,7 @@ class Frontend:
             Output('main-graph', 'figure'),
             Input('dropdown', 'value'),
             Input('dropdown3', 'value'),
+            Input('dropdown4', 'value'),
             Input('interval-update', 'n_intervals')
         ) (self.update_graph)
 
@@ -41,6 +42,11 @@ class Frontend:
             Input('once-interval', 'n_intervals'),
             State('stocks-store', 'data')
         )(self.update_store_once)
+
+        self.app.callback(
+            Output('dropdown4', 'options'),
+            Input('interval-update', 'n_intervals')
+        )(self.update_ta_dropdown_options)
          
     def _setup_layout(self):
 
@@ -88,15 +94,16 @@ class Frontend:
                     multi=True,
                     className='dropdown-menu'
                 ),
-            ], className='dropdown-container'),
                 dcc.Dropdown(
                     id='dropdown4',
-                    options= [{'label':ta_indicator,'value':ta_indicator} for ta_indicator in self.ta_indicators],
+                    options = [{'label': ta_indicator, 'value': ta_indicator} for ta_indicator in self.ta_indicator_info] + [{'label': 'None', 'value': None}],
                     value = None,
                     style= {'fontFamily': 'Arial'},
                     multi=True,
                     className='dropdown-menu'
                 ),
+            ], className='dropdown-container'),
+                
 
             html.Div([
                 html.Div([
@@ -123,37 +130,48 @@ class Frontend:
         print('running server   ---------------')
         self.app.run_server()
    
-    def update_stocks(self, stocks):
+    def update_info(self, stocks,indicators):
         self.stocks = stocks
+        self.ta_indicator_info = indicators
+
         for stock in self.stocks:
-            if stock not in self.stock_data:
-                self.stock_data[stock] = pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits"]).set_index("Date")
+                self.stock_data[stock] = pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits"]+[col for ta_indicator in self.ta_indicator_info.keys() for col in self.ta_indicator_info[ta_indicator]]).set_index("Date")
                 self.action_data[stock] = pd.DataFrame(columns=["Date", "Action", "IdPrice","StopLoss"]).set_index("Date")
         
+
     def update_dropdown_options(self,stocks):
         return [{'label': stock, 'value': stock} for stock in stocks]
 
     def update_store_once(self, n_intervals, current_data):
         return self.stocks
     
+    def update_ta_dropdown_options(self, n_intervals):
+        """
+        Update the options for the TA indicators dropdown.
+        This callback is triggered on every interval update.
+        """
+        return [{'label': ta_indicator, 'value': ta_indicator} for ta_indicator in self.ta_indicator_info.keys()] + [{'label': 'None', 'value': None}]
+
     def update_data(self, data_row):
+            # print(data_row)
             for stock in self.stocks:
-                    self.stock_data[stock].loc[data_row['Date']] = data_row['Stock Info'][stock]
-                    action_obj = data_row['Action'][stock]  # This is an Action instance
-                    self.action_data[stock].loc[data_row['Date'], 'Action'] = action_obj.type
-                    self.action_data[stock].loc[data_row['Date'], 'Amount'] = int(action_obj.amount)
-                    self.action_data[stock].loc[data_row['Date'], 'IdPrice'] = data_row['Stock Info'][stock]['Close']
-                    if action_obj.stop_loss is not None:
-                        self.action_data[stock].loc[data_row['Date'], 'StopLoss'] = float(action_obj.stop_loss)
-                    else:
-                        self.action_data[stock].loc[data_row['Date'], 'StopLoss'] = None
+                self.stock_data[stock].loc[data_row['Date']] = data_row['Stock Info'][stock]
+                action_obj = data_row['Action'][stock]  # This is an Action instance
+                self.action_data[stock].loc[data_row['Date'], 'Action'] = action_obj.type
+                self.action_data[stock].loc[data_row['Date'], 'Amount'] = int(action_obj.amount)
+                self.action_data[stock].loc[data_row['Date'], 'IdPrice'] = data_row['Stock Info'][stock]['Close']
+                
+                if action_obj.stop_loss is not None:
+                    self.action_data[stock].loc[data_row['Date'], 'StopLoss'] = float(action_obj.stop_loss)
+                else:
+                    self.action_data[stock].loc[data_row['Date'], 'StopLoss'] = None
                                             
             self.additional_data.loc[data_row['Date'], 'Capital'] = data_row['Capital']
             self.additional_data.loc[data_row['Date'], 'Cash'] = data_row['Cash']
             self.additional_data.loc[data_row['Date'], 'Equity'] = data_row['Equity']
             self.additional_data.loc[data_row['Date'], 'Portfolio Value'] = data_row['Portfolio Value']
-            
-    def update_graph(self, selected_stocks, selected_graphs, n_intervals):
+
+    def update_graph(self, selected_stocks, selected_graphs, selected_indicators , n_intervals):
         # Handle the case where a single string is passed instead of a list
         if isinstance(selected_stocks, str):
             selected_stocks = [selected_stocks]
@@ -231,6 +249,7 @@ class Frontend:
                         col=1
                     )
             if 'volume' in selected_graphs:
+                max_volume = df['Volume'].max()
                 colors = ['green' if c >= o else 'red' 
                       for c, o in zip(df['Close'], df['Open'])]
                 fig.add_bar(
@@ -243,10 +262,22 @@ class Frontend:
                     col=1,
                     secondary_y=True
                 )
-                fig.update_yaxes(title_text="Volume", secondary_y=True, showgrid=False, rangemode='tozero')
-
-
-        #
+                fig.update_yaxes(title_text="Volume", secondary_y=True, showgrid=False, rangemode='tozero',range=[0, max_volume * 3])
+            
+            if selected_indicators is not None:
+                for ta_indicator in self.ta_indicator_info.keys():
+                    if ta_indicator in selected_indicators:
+                        for col in self.ta_indicator_info[ta_indicator]:
+                            # print(ta_indicator,selected_indicators,col)
+                            fig.add_scatter(
+                                x=df.index,
+                                y=df[col],
+                                mode='lines',
+                                name=f"{ta_indicator}",
+                                row=1,
+                                col=1
+                            )
+            #
         # 2) BOTTOM SUBPLOT (row=2): Additional Data
         #
         df_add = self.additional_data

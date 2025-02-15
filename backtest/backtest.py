@@ -1,7 +1,11 @@
 from backtest.utils.position import Position
 from backtest.utils.dataretriever import DataRetriever
+from backtest.utils.ta_indicators import *
+
 from backtest.frontend import Frontend
 from backtest.core.strategy import Strategy
+from backtest.core.ta_ind import Indicator
+
 from backtest.core.action import Action
 import threading
 import time
@@ -28,6 +32,7 @@ class Backtest:
         self.data = None
         self.orders = []  # Orders executed during the backtest
         self.results = pd.DataFrame(columns=["Date", "Capital", "Cash", "Equity", "Portfolio Value"])
+        self.ta_indicators = [cls() for cls in Indicator.__subclasses__()]
 
 
 
@@ -97,12 +102,16 @@ class Backtest:
             # Control update timing
             yield result_entry, self.positions
         
-
-    
     def get_data(self):
         self.data = self.datatretriever.get_data(self.tickers)
+        self.data = self.apply_ta_indicators()
         return self.data
 
+    def apply_ta_indicators(self):
+        for indicator in self.ta_indicators:
+            for ticker in self.tickers:
+                self.data[ticker] = indicator.apply(self.data[ticker])
+        return self.data
 
     def get_tickers(self,tickers=Union[str,List[str]], sector:str =None):
         if sector is not None:
@@ -130,9 +139,12 @@ class Backtest:
         self.positions = {ticker: Position(size=0, entry_price=None, stop_loss=None) for ticker in self.tickers}
         self.get_data()
 
-        self.visualizer.update_stocks(self.tickers)
+        self.visualizer.update_info(self.tickers, dict((str(indicator), indicator.columns) for indicator in self.ta_indicators))
+        
+        print(self.visualizer.ta_indicator_info.keys())
 
         webbrowser.open('http://127.0.0.1:8050/')
+
         time.sleep(1)
 
         backtest_thread = threading.Thread(target=self.main_thread, args=(strategy, tickers, sector))

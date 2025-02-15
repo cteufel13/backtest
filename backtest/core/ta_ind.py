@@ -1,9 +1,12 @@
 import pandas as pd
 
 class Indicator:
-    def __init__(self, name, params):
+
+    def __init__(self, name):
         self.name = name
-        self.params = params
+        self.columns = []
+
+
 
     def apply(self, data:pd.DataFrame) ->pd.DataFrame:
         raise NotImplementedError
@@ -11,11 +14,8 @@ class Indicator:
     def visualize(self, data:pd.DataFrame) ->pd.DataFrame:
         raise NotImplementedError
 
-    def __str__(self):
-        return f"{self.name}({self.params})"
-
-    def __repr__(self):
-        return self.__str__()
+    def __repr__ ():
+        raise NotImplementedError
 
 
 
@@ -26,15 +26,15 @@ def check_valid_data(data:pd.DataFrame):
         raise ValueError("data is empty")
     if not isinstance(data, pd.DataFrame):
         raise ValueError("data is not a DataFrame")
-    if 'close' not in data.columns:
+    if 'Close' not in data.columns:
         raise ValueError("data does not contain 'close' column")
-    if 'open' not in data.columns:
+    if 'Open' not in data.columns:
         raise ValueError("data does not contain 'open' column")
-    if 'high' not in data.columns:
+    if 'High' not in data.columns:
         raise ValueError("data does not contain 'high' column")
-    if 'low' not in data.columns:
+    if 'Low' not in data.columns:
         raise ValueError("data does not contain 'low' column")
-    if 'volume' not in data.columns:
+    if 'Volume' not in data.columns:
         raise ValueError("data does not contain 'volume' column")
     
     return True
