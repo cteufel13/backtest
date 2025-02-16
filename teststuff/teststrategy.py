@@ -1,5 +1,5 @@
-from backtest.core.strategy import Strategy
-from backtest.core.action import Action
+from backtest.core.strategy_base import Strategy
+from backtest.core.action_base import Action
 from backtest.utils.position import Position
 
 class CustomStrategy(Strategy):

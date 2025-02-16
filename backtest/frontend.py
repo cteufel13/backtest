@@ -1,11 +1,12 @@
 import dash
-from dash import dcc, html
+from dash import dcc, html, dash_table
 import plotly.express as px
 from dash.dependencies import Input, Output, State
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from backtest.utils.ta_indicators import *
+from backtest.utils.indicators import *
+from backtest.utils.performance import get_performance_metrics,calculate_metrics
 import time
 
 class Frontend:
@@ -13,9 +14,12 @@ class Frontend:
     def __init__(self, stocks=None, sectors=None):
         self.stocks = stocks if stocks else ['GOOG']
         self.sectors = sectors if sectors else ['Technology', 'Healthcare', 'Finance']
+
         self.stock_data = {stock: pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits",]).set_index("Date") for stock in self.stocks}
         self.action_data = {stock: pd.DataFrame(columns=["Date", "Action"]).set_index("Date") for stock in self.stocks}
         self.additional_data = pd.DataFrame(columns=["Date", "Capital","Cash","Equity","Portfolio Value"]).set_index("Date")
+
+        self.performance_data = pd.DataFrame(columns=["Date"]+get_performance_metrics())
         self.ta_indicator_info = []
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
         self.server_thread = None
@@ -47,6 +51,11 @@ class Frontend:
             Output('dropdown4', 'options'),
             Input('interval-update', 'n_intervals')
         )(self.update_ta_dropdown_options)
+
+        self.app.callback(
+            Output('performance-table', 'data'),
+            Input('interval-update', 'n_intervals')
+        )(self.update_table)
          
     def _setup_layout(self):
 
@@ -54,6 +63,7 @@ class Frontend:
             html.H1('Stock Price Dashboard', className='header-title'),
             dcc.Store(id='stocks-store', data=self.stocks),
             dcc.Interval(id='once-interval', interval=1000, max_intervals=1),
+            
             html.Div([
                 dcc.Dropdown(
                     id='dropdown',
@@ -104,7 +114,6 @@ class Frontend:
                 ),
             ], className='dropdown-container'),
                 
-
             html.Div([
                 html.Div([
                     html.Div([
@@ -115,10 +124,18 @@ class Frontend:
                             interval=220, # in milliseconds
                             n_intervals=0)
                     ], className='main-graph-container'),
-                    
                     ], className='left-container'),
                 html.Div([
-                    html.H2 ('Actions', className='actions-title'),
+                    html.H2 ('Additional Information', className='information-title'),
+                    dash_table.DataTable(
+                        id = 'performance-table',
+                        columns=[
+                        {"name": "Metric", "id": "Metric"},
+                        {"name": "Value", "id": "Value"},
+                        ],
+                        data = None
+
+                    ),
                 ], className='right-container') 
             ], className='main-container')
             
@@ -133,12 +150,10 @@ class Frontend:
     def update_info(self, stocks,indicators):
         self.stocks = stocks
         self.ta_indicator_info = indicators
-        print(self.ta_indicator_info)
         for stock in self.stocks:
                 self.stock_data[stock] = pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits"]+[col for ta_indicator in self.ta_indicator_info.keys() for (col) in self.ta_indicator_info[ta_indicator][0]]).set_index("Date")
                 self.action_data[stock] = pd.DataFrame(columns=["Date", "Action", "IdPrice","StopLoss"]).set_index("Date")
         
-
     def update_dropdown_options(self,stocks):
         return [{'label': stock, 'value': stock} for stock in stocks]
 
@@ -152,7 +167,7 @@ class Frontend:
         """
         return [{'label': ta_indicator, 'value': ta_indicator} for ta_indicator in self.ta_indicator_info.keys()] + [{'label': 'None', 'value': None}]
 
-    def update_data(self, data_row):
+    def update_data(self, data_row,performance):
             # print(data_row)
             for stock in self.stocks:
                 self.stock_data[stock].loc[data_row['Date']] = data_row['Stock Info'][stock]
@@ -170,13 +185,11 @@ class Frontend:
             self.additional_data.loc[data_row['Date'], 'Cash'] = data_row['Cash']
             self.additional_data.loc[data_row['Date'], 'Equity'] = data_row['Equity']
             self.additional_data.loc[data_row['Date'], 'Portfolio Value'] = data_row['Portfolio Value']
-
+            self.performance_data.loc[data_row['Date']] = performance
+    
     def update_graph(self, selected_stocks, selected_graphs, selected_indicators , n_intervals):
-        # Handle the case where a single string is passed instead of a list
         if isinstance(selected_stocks, str):
             selected_stocks = [selected_stocks]
-
-
 
         indicators_with_exgraph = False
         if selected_indicators is not None:
@@ -187,28 +200,22 @@ class Frontend:
 
         additional_data_row = 3 if indicators_with_exgraph else 2
 
-
-
-        # Decide the number of rows based on the presence of extra indicator graphs.
         if indicators_with_exgraph:
-            # 3 rows: Row 1 - stocks, Row 2 - TA indicators, Row 3 - additional data
             num_rows = 3
             row_heights = [0.6, 0.2, 0.2]
             specs = [
-                [{"secondary_y": True}],  # Row 1: Stock charts
-                [{}],                     # Row 2: TA indicators
-                [{}]                      # Row 3: Additional data
+                [{"secondary_y": True}],  
+                [{}],                     
+                [{}]                     
             ]
         else:
-            # 2 rows: Row 1 - stocks (and TA indicators drawn on the main chart), Row 2 - additional data
             num_rows = 2
             row_heights = [0.7, 0.3]
             specs = [
-                [{"secondary_y": True}],  # Row 1: Stock charts + TA indicators
-                [{}]                      # Row 2: Additional data
+                [{"secondary_y": True}], 
+                [{}]                      
             ]
 
-        # Create a figure with 2 rows, 1 column, sharing the x-axis
         fig = make_subplots(rows=num_rows,
                             cols=1,
                             shared_xaxes=True,
@@ -217,13 +224,9 @@ class Frontend:
                             specs=specs
                             )
 
-        #
-        # 1) TOP SUBPLOT (row=1): Stocks + Candlestick + Buy/Sell
-        #
         for selected_stock in selected_stocks:
             df = self.stock_data[selected_stock]
 
-            # If "line" is selected
             if 'line' in selected_graphs:
                 fig.add_scatter(
                     x=df.index,
@@ -234,7 +237,6 @@ class Frontend:
                     col=1
                 )
 
-            # If "candlestick" is selected
             if 'candlestick' in selected_graphs:
                 fig.add_candlestick(
                     x=df.index,
@@ -247,11 +249,9 @@ class Frontend:
                     col=1
                 )
 
-            # If "buy/sell" is selected
             if 'buy/sell' in selected_graphs:
                 actions_df = self.action_data[selected_stock]
 
-                # Buys
                 buys = actions_df[actions_df['Action'] == 'buy']
                 if not buys.empty:
                     fig.add_scatter(
@@ -266,7 +266,6 @@ class Frontend:
                         col=1
                     )
 
-                # Sells
                 sells = actions_df[actions_df['Action'] == 'sell']
                 if not sells.empty:
                     fig.add_scatter(
@@ -321,10 +320,7 @@ class Frontend:
                                     row=2,
                                     col=1
                                 )
-                                #### need to find way to plot it onto a grpah thats supposed ot be like in the middle.
-            #
-        # 2) BOTTOM SUBPLOT (row=2): Additional Data
-        #
+
         df_add = self.additional_data
 
         fig.add_scatter(
@@ -360,7 +356,6 @@ class Frontend:
             col=1
         )
 
-        # Update overall figure layout
         fig.update_yaxes(title_text="Price", secondary_y=False)
 
         fig.update_layout(
@@ -373,3 +368,9 @@ class Frontend:
         )
 
         return fig
+
+    def update_table(self, n_intervals):
+        row = self.performance_data.iloc[-1]
+        data = [{'Metric': metric, 'Value': row[metric]} for metric in row.index]
+        return data
+        

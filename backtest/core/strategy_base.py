@@ -1,4 +1,4 @@
-from backtest.core.action import Action
+from backtest.core.action_base import Action
 
 class Strategy:
 

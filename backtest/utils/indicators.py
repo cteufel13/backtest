@@ -1,5 +1,5 @@
 import pandas as pd
-from backtest.core.ta_ind import Indicator, check_valid_data
+from backtest.core.indicator_base import Indicator, check_valid_data
 import plotly.graph_objects as go
 import plotly.express as px
 """

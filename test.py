@@ -8,9 +8,7 @@ from teststuff.teststrategy import CustomStrategy
 backtest = Backtest(initial_capital=10000, commission=0.001, slippage=0.0, stop_loss_pct=0.02,duration=365*10, start_date=None, end_date=None, interval='1d')
 strat = CustomStrategy()
 
+backtest.run(strategy=strat, tickers=['AAPL','GOOG','MCFT'],start_visualizer=True  ) 
 
-# frontend = Frontend()
-# frontend.run()
-backtest.run(strategy=strat, tickers=['AAPL','GOOG','MCFT']) 
-
+# print(backtest.performance.loc[0])
 ## test if passing whole
