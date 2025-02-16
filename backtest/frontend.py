@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from backtest.utils.ta_indicators import *
-
+import time
 
 class Frontend:
 
@@ -133,9 +133,9 @@ class Frontend:
     def update_info(self, stocks,indicators):
         self.stocks = stocks
         self.ta_indicator_info = indicators
-
+        print(self.ta_indicator_info)
         for stock in self.stocks:
-                self.stock_data[stock] = pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits"]+[col for ta_indicator in self.ta_indicator_info.keys() for col in self.ta_indicator_info[ta_indicator]]).set_index("Date")
+                self.stock_data[stock] = pd.DataFrame(columns=["Date", "Open","High","Low","Close","Volume","Dividends", "Stock Splits"]+[col for ta_indicator in self.ta_indicator_info.keys() for (col) in self.ta_indicator_info[ta_indicator][0]]).set_index("Date")
                 self.action_data[stock] = pd.DataFrame(columns=["Date", "Action", "IdPrice","StopLoss"]).set_index("Date")
         
 
@@ -176,13 +176,45 @@ class Frontend:
         if isinstance(selected_stocks, str):
             selected_stocks = [selected_stocks]
 
+
+
+        indicators_with_exgraph = False
+        if selected_indicators is not None:
+            for ta_indicator in self.ta_indicator_info.keys():
+                if ta_indicator in selected_indicators and self.ta_indicator_info[ta_indicator][1]:
+                        indicators_with_exgraph = True
+                        break
+
+        additional_data_row = 3 if indicators_with_exgraph else 2
+
+
+
+        # Decide the number of rows based on the presence of extra indicator graphs.
+        if indicators_with_exgraph:
+            # 3 rows: Row 1 - stocks, Row 2 - TA indicators, Row 3 - additional data
+            num_rows = 3
+            row_heights = [0.6, 0.2, 0.2]
+            specs = [
+                [{"secondary_y": True}],  # Row 1: Stock charts
+                [{}],                     # Row 2: TA indicators
+                [{}]                      # Row 3: Additional data
+            ]
+        else:
+            # 2 rows: Row 1 - stocks (and TA indicators drawn on the main chart), Row 2 - additional data
+            num_rows = 2
+            row_heights = [0.7, 0.3]
+            specs = [
+                [{"secondary_y": True}],  # Row 1: Stock charts + TA indicators
+                [{}]                      # Row 2: Additional data
+            ]
+
         # Create a figure with 2 rows, 1 column, sharing the x-axis
-        fig = make_subplots(rows=2, 
+        fig = make_subplots(rows=num_rows,
                             cols=1,
-                            shared_xaxes=True, 
+                            shared_xaxes=True,
                             vertical_spacing=0.03,
-                            row_heights=[0.7, 0.3],
-                            specs=[[{"secondary_y": True}], [{}]]
+                            row_heights=row_heights,
+                            specs=specs
                             )
 
         #
@@ -267,16 +299,29 @@ class Frontend:
             if selected_indicators is not None:
                 for ta_indicator in self.ta_indicator_info.keys():
                     if ta_indicator in selected_indicators:
-                        for col in self.ta_indicator_info[ta_indicator]:
-                            # print(ta_indicator,selected_indicators,col)
-                            fig.add_scatter(
-                                x=df.index,
-                                y=df[col],
-                                mode='lines',
-                                name=f"{ta_indicator}",
-                                row=1,
-                                col=1
-                            )
+                        if not self.ta_indicator_info[ta_indicator][1]:
+                            for col in self.ta_indicator_info[ta_indicator][0]:
+                                # print(ta_indicator,selected_indicators,col)
+                                    fig.add_scatter(
+                                        x=df.index,
+                                        y=df[col],
+                                        mode='lines',
+                                        name=f"{ta_indicator}",
+                                        row=1,
+                                        col=1
+                                )
+                            # If it requires a separate graph, add it to row 2 if available
+                        else:
+                            for col in self.ta_indicator_info[ta_indicator][0]:
+                                fig.add_scatter(
+                                    x=df.index,
+                                    y=df[col],
+                                    mode='lines',
+                                    name=f"{ta_indicator}",
+                                    row=2,
+                                    col=1
+                                )
+                                #### need to find way to plot it onto a grpah thats supposed ot be like in the middle.
             #
         # 2) BOTTOM SUBPLOT (row=2): Additional Data
         #
@@ -287,7 +332,7 @@ class Frontend:
             y=df_add['Capital'],
             mode='lines',
             name='Capital',
-            row=2,
+            row=additional_data_row,
             col=1
         )
         fig.add_scatter(
@@ -295,7 +340,7 @@ class Frontend:
             y=df_add['Cash'],
             mode='lines',
             name='Cash',
-            row=2,
+            row=additional_data_row,
             col=1
         )
         fig.add_scatter(
@@ -303,7 +348,7 @@ class Frontend:
             y=df_add['Equity'],
             mode='lines',
             name='Equity',
-            row=2,
+            row=additional_data_row,
             col=1
         )
         fig.add_scatter(
@@ -311,7 +356,7 @@ class Frontend:
             y=df_add['Portfolio Value'],
             mode='lines',
             name='Portfolio Value',
-            row=2,
+            row=additional_data_row,
             col=1
         )
 

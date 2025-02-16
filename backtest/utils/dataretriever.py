@@ -1,9 +1,11 @@
 import yfinance as yf
 import pandas as pd
+import pandas_datareader.data as web
+
 from typing import Union, List
 
 class DataRetriever:
-    def __init__(self,duration = None, start_date = None, end_date = None, interval = '1h'):
+    def __init__(self,duration = None, start_date = None, end_date = None, interval = '1h',):
 
         self.duration = duration
         self.start_date = start_date
@@ -21,7 +23,7 @@ class DataRetriever:
         elif self.duration is None and self.start_date is None and self.end_date is None:
             raise ValueError("Please provide either duration or start_date and end_date")
         
-    def get_data(self,ticker:Union[str,List[str]] = None , sector:str = None):
+    def get_data(self,ticker:Union[str,List[str]] = None , sector:str = None,risk_free_rate=True,SP500 = True):
        
         data = {}
 
@@ -31,12 +33,18 @@ class DataRetriever:
             tickers = ticker
         elif ticker is not None and type(ticker) == str:
             tickers = [ticker]
+        elif SP500 is not None:
+            tickers.append('^GSPC')
+        
         else:
             raise ValueError("Please provide either ticker or sector")
         
         for ticker in tickers:
             ticker_data = self.get_ticker_data(ticker)
             data[ticker] = ticker_data
+
+        if risk_free_rate:
+            data['RFRate'] = self.get_risk_free(ticker_index = data[ticker].index, rate_column='DTB3')
 
         return data
 
@@ -61,3 +69,21 @@ class DataRetriever:
             # print(data)
         # print(data.head())
         return data
+
+
+    def get_risk_free(self,ticker_index: pd.DatetimeIndex, rate_column: str = 'DTB3') -> pd.DataFrame:
+        
+        start_date = ticker_index.min().strftime('%Y-%m-%d')
+        end_date = ticker_index.max().strftime('%Y-%m-%d')
+        
+        risk_free_data = web.DataReader(rate_column, 'fred', start_date, end_date)
+        
+        if ticker_index.tz is not None:
+            if risk_free_data.index.tz is None:
+                risk_free_data.index = risk_free_data.index.tz_localize(ticker_index.tz)
+            else:
+                risk_free_data.index = risk_free_data.index.tz_convert(ticker_index.tz)
+        
+        aligned_rf = risk_free_data[rate_column].reindex(ticker_index, method='ffill')
+        
+        return pd.DataFrame({'RFRate': aligned_rf}, index=ticker_index)

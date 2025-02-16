@@ -17,6 +17,7 @@ class SMA20(Indicator):
         super().__init__('SMA20')
         self.window = 20
         self.columns = ['SMA20']
+        self.need_extra_graph = False
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         if check_valid_data(data):
@@ -37,6 +38,8 @@ class SMA50(Indicator):
         super().__init__('SMA50')
         self.window = 50
         self.columns = ['SMA50']
+        self.need_extra_graph = False
+
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         if check_valid_data(data):
@@ -57,6 +60,8 @@ class SMA200(Indicator):
         super().__init__('SMA200')
         self.window = 200
         self.columns = ['SMA200']
+        self.need_extra_graph = False
+
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         if check_valid_data(data):
@@ -79,6 +84,8 @@ class MACD(Indicator):
         self.window2 = 26
         self.window3 = 9
         self.columns = ['MACD', 'Signal']
+        self.need_extra_graph = True
+
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         if check_valid_data(data):
@@ -102,6 +109,7 @@ class RSI(Indicator):
         super().__init__('RSI')
         self.window = 14
         self.columns = ['RSI']
+        self.need_extra_graph = True
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         if check_valid_data(data):
@@ -127,6 +135,8 @@ class BollingerBands(Indicator):
         super().__init__('BollingerBands')
         self.window = 20
         self.columns = [ 'UpperBand', 'LowerBand']
+        self.need_extra_graph = False
+
 
     def apply(self, data: pd.DataFrame) -> pd.DataFrame:
         if check_valid_data(data):

@@ -5,6 +5,7 @@ class Indicator:
     def __init__(self, name):
         self.name = name
         self.columns = []
+        self.need_extra_graph = False
 
 
 

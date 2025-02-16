@@ -117,11 +117,11 @@ class Backtest:
         if sector is not None:
             self.tickers = self.datatretriever.get_sector_tickers(sector)
         elif tickers is not None and isinstance(tickers, str): 
-            self.tickers = [tickers]
+            self.tickers = [tickers] + ['^GSPC']
         elif tickers is not None and isinstance(tickers, list):
-            self.tickers = tickers
+            self.tickers = tickers+ ['^GSPC']
         else:
-            raise ValueError("Please provide either tickers or sector")
+            ['^GSPC']
     
     def main_thread(self, strategy, tickers, sector):
         for result, _ in self.run_backtest(strategy, tickers, sector):
@@ -129,21 +129,18 @@ class Backtest:
             self.visualizer.update_data(result)
             time.sleep(0.5)
 
-        
-
-
     def run(self, strategy, tickers, sector=None):
         """Runs the backtest and starts the frontend visualization."""
         
         self.get_tickers(tickers=tickers, sector=sector)
         self.positions = {ticker: Position(size=0, entry_price=None, stop_loss=None) for ticker in self.tickers}
         self.get_data()
+    
+        self.visualizer.update_info(self.tickers, dict((str(indicator), (indicator.columns,indicator.need_extra_graph)) for indicator in self.ta_indicators))
+        print(self.visualizer.ta_indicator_info)
+        # print(self.visualizer.ta_indicator_info.keys())
 
-        self.visualizer.update_info(self.tickers, dict((str(indicator), indicator.columns) for indicator in self.ta_indicators))
-        
-        print(self.visualizer.ta_indicator_info.keys())
-
-        webbrowser.open('http://127.0.0.1:8050/')
+        # webbrowser.open('http://127.0.0.1:8050/')
 
         time.sleep(1)
 
@@ -167,3 +164,4 @@ class Backtest:
         
 
 
+ 
