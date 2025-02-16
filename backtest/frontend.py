@@ -45,6 +45,7 @@ class Frontend:
         )
         self.ta_indicator_info = []
         self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
+        self.app.title = "Backtest Dashboard"
         self.server_thread = None
         self._setup_layout()
         self._setup_callbacks()
