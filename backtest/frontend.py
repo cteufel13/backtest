@@ -179,6 +179,12 @@ class Frontend:
                                         {"name": "Metric", "id": "Metric"},
                                         {"name": "Value", "id": "Value"},
                                     ],
+                                    style_cell={
+                                        "minWidth": "150px",  # Minimum width of each cell
+                                        "width": "150px",  # Ideal width of each cell
+                                        "maxWidth": "150px",  # Maximum width of each cell
+                                        "textAlign": "left",
+                                    },
                                     data=None,
                                 ),
                             ],
@@ -262,6 +268,9 @@ class Frontend:
             "Portfolio Value"
         ]
         self.performance_data.loc[data_row["Date"]] = performance
+        self.performance_data = self.performance_data.apply(
+            pd.to_numeric, errors="coerce"
+        )
 
     def update_graph(
         self, selected_stocks, selected_graphs, selected_indicators, n_intervals
@@ -443,14 +452,23 @@ class Frontend:
 
         fig.update_layout(
             xaxis_rangeslider_visible=False,  # Hide the rangeslider if you don't want it
-            legend=dict(itemclick=False, itemdoubleclick=False),
+            legend=dict(
+                itemclick=False,
+                itemdoubleclick=False,
+                x=0.95,
+                y=1,
+                xanchor="left",
+                yanchor="top",
+            ),
             height=800,
+            margin=dict(t=50),
         )
 
         return fig
 
     def update_table(self, n_intervals):
 
-        row = self.performance_data.iloc[-1]
+        row = self.performance_data.iloc[-1].round(2)
+        print(row.dtypes, row.dtype)
         data = [{"Metric": metric, "Value": row[metric]} for metric in row.index]
         return data

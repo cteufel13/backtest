@@ -1,11 +1,9 @@
-
-
-.header-title{
+.header-title {
     height: 50px;
     color: black;
     text-align: center;
     font-family: 'Arial';
-    margin:0px;
+    margin: 0px;
 
     padding: 20px;
     /* border: 1px solid black; */
@@ -26,14 +24,14 @@
     height: 100%;
 }
 
-.main-graph .js-plotly-plot{
+.main-graph .js-plotly-plot {
     max-width: 100%;
     /* border: 1px solid black; */
     padding: 0;
 }
 
 
-.additional-graph .js-plotly-plot{
+.additional-graph .js-plotly-plot {
     max-height: 300px;
     /* border: 1px solid black; */
     padding: 0;
@@ -51,10 +49,10 @@
 
 .right-container {
     /* border: 1px solid lightcoral; */
-    width: 20%;
-}   
+    width: 18%;
+}
 
-.information-title{
+.information-title {
     color: black;
     text-align: center;
     font-family: 'Arial';

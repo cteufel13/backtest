@@ -117,6 +117,19 @@ class Backtest:
                         self.execute_order(
                             "sell", current_price, self.positions[ticker].size, ticker
                         )
+                        action_entry = {
+                            "Date": date,
+                            "Ticker": ticker,
+                            "Type": "sell",
+                            "Amount": self.positions[ticker].size,
+                            "Price": current_price,
+                            "Stop Loss": self.positions[ticker].stop_loss,
+                        }
+                        self.actions = pd.concat(
+                            [self.actions, pd.DataFrame([action_entry])],
+                            ignore_index=True,
+                        )
+
                     self.positions[ticker].update_stop_loss(
                         current_price, trailing_stop_pct=0.05
                     )
