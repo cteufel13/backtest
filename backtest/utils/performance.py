@@ -36,7 +36,9 @@ def get_performance_metrics() -> list:
     return list(metrics.keys())
 
 
-def calculate_metrics(date, results_df: pd.DataFrame, action_data) -> pd.Series:
+def calculate_metrics(
+    date, stock_data, portfolio_history: pd.DataFrame, action_history
+) -> pd.Series:
     """
     Calculate all trading metrics and return them as a single pandas Series.
 
@@ -48,22 +50,22 @@ def calculate_metrics(date, results_df: pd.DataFrame, action_data) -> pd.Series:
     """
     metrics = {
         "Date": date,
-        "Start": calculate_Start(results_df),
-        "End": calculate_End(results_df),
-        "Duration": calculate_Duration(results_df),
-        "Exposure Time [%]": calculate_ExposureTime(results_df),
-        "Equity Final [$]": calculate_EquityFinal(results_df),
-        "Equity Peak [$]": calculate_EquityPeak(results_df),
-        "Return [%]": calculate_ReturnPct(results_df),
-        "Buy & Hold Return [%]": calculate_BuyHoldReturn(results_df),
-        "Return (Ann.) [%]": calculate_ReturnAnn(results_df),
-        "Volatility (Ann.) [%]": calculate_VolatilityAnn(results_df),
-        "CAGR [%]": calculate_Cagr(results_df),
-        "Sharpe Ratio": calculate_SharpeRatio(results_df),
-        "Sortino Ratio": calculate_SortinoRatio(results_df),
-        "Max. Drawdown [%]": calculate_MaxDrawdown(results_df),
-        "Avg. Drawdown [%]": calculate_AvgDrawdown(results_df),
-        "# Trades": calculate_Trades(results_df, action_data),
+        "Start": calculate_Start(portfolio_history),
+        "End": calculate_End(portfolio_history),
+        "Duration": calculate_Duration(portfolio_history),
+        "Exposure Time [%]": calculate_ExposureTime(portfolio_history),
+        "Equity Final [$]": calculate_EquityFinal(portfolio_history),
+        "Equity Peak [$]": calculate_EquityPeak(portfolio_history),
+        "Return [%]": calculate_ReturnPct(portfolio_history),
+        "Buy & Hold Return [%]": calculate_BuyHoldReturn(date, stock_data),
+        "Return (Ann.) [%]": calculate_ReturnAnn(portfolio_history),
+        "Volatility (Ann.) [%]": calculate_VolatilityAnn(portfolio_history),
+        "CAGR [%]": calculate_Cagr(portfolio_history),
+        "Sharpe Ratio": calculate_SharpeRatio(portfolio_history),
+        "Sortino Ratio": calculate_SortinoRatio(portfolio_history),
+        "Max. Drawdown [%]": calculate_MaxDrawdown(portfolio_history),
+        "Avg. Drawdown [%]": calculate_AvgDrawdown(portfolio_history),
+        "# Trades": calculate_Trades(portfolio_history, action_history),
         # "Win Rate [%]": calculate_WinRate(results_df),
         # "Best Trade [%]": calculate_BestTrade(results_df),
         # "Worst Trade [%]": calculate_WorstTrade(results_df),
@@ -132,17 +134,42 @@ def calculate_ReturnPct(results_df: pd.DataFrame):
     return ((final_equity - initial_capital) / initial_capital) * 100
 
 
-def calculate_BuyHoldReturn(results_df: pd.DataFrame):
+def calculate_BuyHoldReturn(target_date, stock_data: dict):
     """
-    Calculate buy and hold return percentage for each stock and return the average
+    Computes the Buy & Hold return percentage for each stock in the dataset and returns the average.
+
+    Parameters:
+    - target_date (str or pd.Timestamp): The date on which to calculate the return.
+    - stock_data (dict): A dictionary where each key is a stock ticker, and each value is a Pandas DataFrame
+      containing historical stock prices with 'Close' as one of the columns.
+
+    Returns:
+    - float: The average Buy & Hold return percentage across all stocks.
     """
-    buy_hold_returns = []
-    for ticker in results_df["Stock Info"].iloc[0].keys():
-        first_price = results_df["Stock Info"].iloc[0][ticker]["Close"]
-        last_price = results_df["Stock Info"].iloc[-1][ticker]["Close"]
-        buy_hold_return = ((last_price - first_price) / first_price) * 100
-        buy_hold_returns.append(buy_hold_return)
-    return np.mean(buy_hold_returns)
+    returns = []
+
+    for ticker, df in stock_data.items():
+        try:
+            # Ensure target_date is in datetime format
+            target_date = pd.to_datetime(target_date)
+
+            # Extract closing prices
+            initial_price = df.iloc[0]["Close"]
+            final_price = df.loc[target_date, "Close"]
+
+            # Compute Buy & Hold return percentage
+            return_pct = ((final_price - initial_price) / initial_price) * 100
+            returns.append(return_pct)
+
+            # Debugging output
+            # print(
+            #     f"{ticker} - Initial: {initial_price:.2f}, Final: {final_price:.2f}, Return: {return_pct:.2f}%"
+            # )
+
+        except KeyError:
+            print(f"Warning: Date {target_date} not found for {ticker}. Skipping.")
+
+    return np.mean(returns)
 
 
 def calculate_ReturnAnn(results_df: pd.DataFrame):

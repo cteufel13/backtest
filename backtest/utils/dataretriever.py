@@ -46,7 +46,7 @@ class DataRetriever:
         self,
         ticker: Union[str, List[str]] = None,
         sector: str = None,
-        risk_free_rate=True,
+        risk_free_rate=False,
         SP500=True,
     ):
 
@@ -68,10 +68,10 @@ class DataRetriever:
             ticker_data = self.get_ticker_data(ticker)
             data[ticker] = ticker_data
 
-        if risk_free_rate:
-            data["RFRate"] = self.get_risk_free(
-                ticker_index=data[ticker].index, rate_column="DTB3"
-            )
+        # if risk_free_rate:
+        #     data["RFRate"] = self.get_risk_free(
+        #         ticker_index=data[ticker].index, rate_column="DTB3"
+        #     )
 
         return data
 
@@ -97,8 +97,7 @@ class DataRetriever:
             while data.empty:
                 print("Trying Again")
                 data = ticker.history(period="max", interval=self.interval)
-            # print(data)
-        # print(data.head())
+
         return data
 
     def get_risk_free(

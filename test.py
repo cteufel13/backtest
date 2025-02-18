@@ -16,7 +16,7 @@ backtest = Backtest(
 )
 strat = CustomStrategy()
 
-backtest.run(strategy=strat, tickers=["AAPL", "GOOG", "MCFT"], start_visualizer=True)
+backtest.run(strategy=strat, tickers=["AAPL", "GOOG", "MCFT"], start_visualizer=False)
 
 # print(backtest.performance.loc[0])
 ## test if passing whole

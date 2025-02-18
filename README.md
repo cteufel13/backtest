@@ -23,3 +23,4 @@ This project is a backtesting framework for financial trading strategies. It inc
 - Improve visualization by limiting the maximum amount of displayed data.
 - Add an overview of all statistics, including Sharpe Ratio and SP500 baselines.
 - Enhance backend functionality for better strategy tracking and experimentation.
+- READO the actions and add top graph to thing, check claude for answer

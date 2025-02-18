@@ -37,7 +37,7 @@ class Backtest:
             end_date=end_date,
             interval=interval,
         )
-        self.visualizer = Frontend()
+        # self.visualizer = Frontend()
 
         self.tickers = None  # List of tickers or sectors
 
@@ -51,17 +51,19 @@ class Backtest:
         self.data = None
         self.orders = []  # Orders executed during the backtest
 
-        self.results = pd.DataFrame(
+        self.portfolio_history = pd.DataFrame(
             columns=["Date", "Capital", "Cash", "Equity", "Portfolio Value"]
-        )
-        self.actions = pd.DataFrame(
+        ).set_index("Date")
+        self.action_history = pd.DataFrame(
             columns=["Date", "Ticker", "Type", "Amount", "Price", "Stop Loss"]
-        )
+        ).set_index("Date")
         self.position_history = pd.DataFrame(
             columns=["Date", "Ticker", "Size", "Entry Price", "Stop Loss"]
-        )
+        ).set_index("Date")
 
-        self.performance = pd.DataFrame(columns=["Date"] + get_performance_metrics())
+        self.performance_history = pd.DataFrame(
+            columns=["Date"] + get_performance_metrics()
+        ).set_index("Date")
 
         self.ta_indicators = [cls() for cls in Indicator.__subclasses__()]
 
@@ -105,9 +107,8 @@ class Backtest:
             all_dates = all_dates.intersection(self.data[ticker].index)
 
         for i, date in enumerate(all_dates):
-
+            # print("Date: ", date)
             total_value = 0
-            actions = {}
 
             for ticker in self.tickers:
                 row = self.data[ticker].loc[date]
@@ -125,8 +126,8 @@ class Backtest:
                             "Price": current_price,
                             "Stop Loss": self.positions[ticker].stop_loss,
                         }
-                        self.actions = pd.concat(
-                            [self.actions, pd.DataFrame([action_entry])],
+                        self.action_history = pd.concat(
+                            [self.action_history, pd.DataFrame([action_entry])],
                             ignore_index=True,
                         )
 
@@ -135,7 +136,7 @@ class Backtest:
                     )
 
                 action = strategy.get_action(row, ticker, self.positions)
-                actions[ticker] = action
+
                 if action.type == "buy":
                     self.execute_order("buy", current_price, action.amount, ticker)
                 elif action.type == "sell":
@@ -151,6 +152,7 @@ class Backtest:
                     "Price": current_price,
                     "Stop Loss": self.positions[ticker].stop_loss,
                 }
+
                 Position_entry = {
                     "Date": date,
                     "Ticker": ticker,
@@ -158,44 +160,38 @@ class Backtest:
                     "Entry Price": self.positions[ticker].entry_price,
                     "Stop Loss": self.positions[ticker].stop_loss,
                 }
-                self.actions = pd.concat(
-                    [self.actions, pd.DataFrame([action_entry])], ignore_index=True
+
+                self.action_history = pd.concat(
+                    [self.action_history, pd.DataFrame([action_entry])],
+                    ignore_index=True,
                 )
                 self.position_history = pd.concat(
                     [self.position_history, pd.DataFrame([Position_entry])],
                     ignore_index=True,
                 )
-            if i != 0:
-                metrics_entry = calculate_metrics(date, self.results, self.actions)
-            else:
-                metrics_entry = dict(
-                    [("Date", date)]
-                    + [(metric, 0) for metric in get_performance_metrics()]
-                )
-            self.performance = pd.concat(
-                [self.performance, pd.DataFrame([metrics_entry])], ignore_index=True
-            )
 
             equity = self.capital + total_value
-            # print(actions)
-            result_entry = {
+
+            portfolio_entry = {
                 "Date": date,
                 "Capital": self.initial_capital,
                 "Cash": self.capital,
                 "Equity": equity,
                 "Portfolio Value": equity,
-                "Action": actions,
-                "Stock Info": {
-                    ticker: self.data[ticker].loc[date] for ticker in self.tickers
-                },
             }
 
-            self.results = pd.concat(
-                [self.results, pd.DataFrame([result_entry])], ignore_index=True
+            self.portfolio_history.loc[date] = portfolio_entry
+
+            metrics_entry = calculate_metrics(
+                date, self.data, self.portfolio_history, self.action_history
             )
 
-            # Control update timing
-            yield result_entry, self.positions, metrics_entry
+            self.performance_history = pd.concat(
+                [self.performance_history, pd.DataFrame([metrics_entry])],
+                ignore_index=True,
+            )
+
+            time.sleep(0.5)
 
     def get_data(self):
         self.data = self.datatretriever.get_data(self.tickers)
@@ -218,12 +214,6 @@ class Backtest:
         else:
             ["^GSPC"]
 
-    def main_thread(self, strategy, tickers, sector):
-        for result, _, performance in self.run_backtest(strategy, tickers, sector):
-
-            self.visualizer.update_data(result, performance)
-            time.sleep(0.5)
-
     def run(self, strategy, tickers, sector=None, start_visualizer=True):
         """Runs the backtest and starts the frontend visualization."""
 
@@ -235,6 +225,9 @@ class Backtest:
         self.get_data()
 
         if start_visualizer:
+            # Create Frontend instance with reference to this Backtest instance
+            self.visualizer = Frontend(backtest_instance=self)
+
             self.visualizer.update_info(
                 self.tickers,
                 dict(
@@ -245,20 +238,22 @@ class Backtest:
 
             webbrowser.open("http://127.0.0.1:8050/")
 
-            time.sleep(1)
-
+            # Start backtest in a separate thread
             backtest_thread = threading.Thread(
-                target=self.main_thread, args=(strategy, tickers, sector)
+                target=self.run_backtest, args=(strategy, tickers, sector)
             )
             backtest_thread.daemon = True
             backtest_thread.start()
 
             print("Starting Frontend...")
-
             self.visualizer.run()
 
         else:
-            for result, _, _ in self.run_backtest(strategy, tickers, sector):
-                pass
+            self.run_backtest(strategy, tickers, sector)
 
-            print(self.actions, self.position_history, self.results)
+            print("Backtest completed.")
+
+            print("Portfolio:\n", self.portfolio_history)
+            print("Actions:\n", self.action_history)
+            print("Positions:\n", self.position_history)
+            print("Performance:\n", self.performance_history)

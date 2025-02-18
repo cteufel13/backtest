@@ -12,41 +12,13 @@ import time
 
 class Frontend:
 
-    def __init__(self, stocks=None, sectors=None):
-
-        self.stocks = stocks if stocks else ["GOOG"]
-        self.sectors = sectors if sectors else ["Technology", "Healthcare", "Finance"]
-
-        self.stock_data = {
-            stock: pd.DataFrame(
-                columns=[
-                    "Date",
-                    "Open",
-                    "High",
-                    "Low",
-                    "Close",
-                    "Volume",
-                    "Dividends",
-                    "Stock Splits",
-                ]
-            ).set_index("Date")
-            for stock in self.stocks
-        }
-        self.action_data = {
-            stock: pd.DataFrame(columns=["Date", "Action"]).set_index("Date")
-            for stock in self.stocks
-        }
-        self.additional_data = pd.DataFrame(
-            columns=["Date", "Capital", "Cash", "Equity", "Portfolio Value"]
-        ).set_index("Date")
-
-        self.performance_data = pd.DataFrame(
-            columns=["Date"] + get_performance_metrics()
-        )
-        self.ta_indicator_info = []
-        self.app = dash.Dash(__name__, suppress_callback_exceptions=True)
+    def __init__(self, backtest_instance=None):
+        self.backtest_instance = backtest_instance
+        self.app = dash.Dash(__name__, suppress_callback_exceptions=False)
         self.app.title = "Backtest Dashboard"
         self.server_thread = None
+        self.stocks = ["GOOG"]
+        self.ta_indicator_info = []
         self._setup_layout()
         self._setup_callbacks()
 
@@ -158,7 +130,7 @@ class Frontend:
                                         ),
                                         dcc.Interval(
                                             id="interval-update",
-                                            interval=220,  # in milliseconds
+                                            interval=500,  # in milliseconds
                                             n_intervals=0,
                                         ),
                                     ],
@@ -204,27 +176,6 @@ class Frontend:
     def update_info(self, stocks, indicators):
         self.stocks = stocks
         self.ta_indicator_info = indicators
-        for stock in self.stocks:
-            self.stock_data[stock] = pd.DataFrame(
-                columns=[
-                    "Date",
-                    "Open",
-                    "High",
-                    "Low",
-                    "Close",
-                    "Volume",
-                    "Dividends",
-                    "Stock Splits",
-                ]
-                + [
-                    col
-                    for ta_indicator in self.ta_indicator_info.keys()
-                    for (col) in self.ta_indicator_info[ta_indicator][0]
-                ]
-            ).set_index("Date")
-            self.action_data[stock] = pd.DataFrame(
-                columns=["Date", "Action", "IdPrice", "StopLoss"]
-            ).set_index("Date")
 
     def update_dropdown_options(self, stocks):
         return [{"label": stock, "value": stock} for stock in stocks]
@@ -242,39 +193,33 @@ class Frontend:
             for ta_indicator in self.ta_indicator_info.keys()
         ] + [{"label": "None", "value": None}]
 
-    def update_data(self, data_row, performance):
-        for stock in self.stocks:
-            self.stock_data[stock].loc[data_row["Date"]] = data_row["Stock Info"][stock]
-            action_obj = data_row["Action"][stock]  # This is an Action instance
-            self.action_data[stock].loc[data_row["Date"], "Action"] = action_obj.type
-            self.action_data[stock].loc[data_row["Date"], "Amount"] = int(
-                action_obj.amount
-            )
-            self.action_data[stock].loc[data_row["Date"], "IdPrice"] = data_row[
-                "Stock Info"
-            ][stock]["Close"]
+    def update_table(self, n_intervals):
+        if (
+            not self.backtest_instance
+            or self.backtest_instance.performance_history.empty
+        ):
+            return []
 
-            if action_obj.stop_loss is not None:
-                self.action_data[stock].loc[data_row["Date"], "StopLoss"] = float(
-                    action_obj.stop_loss
-                )
-            else:
-                self.action_data[stock].loc[data_row["Date"], "StopLoss"] = None
-
-        self.additional_data.loc[data_row["Date"], "Capital"] = data_row["Capital"]
-        self.additional_data.loc[data_row["Date"], "Cash"] = data_row["Cash"]
-        self.additional_data.loc[data_row["Date"], "Equity"] = data_row["Equity"]
-        self.additional_data.loc[data_row["Date"], "Portfolio Value"] = data_row[
-            "Portfolio Value"
-        ]
-        self.performance_data.loc[data_row["Date"]] = performance
-        self.performance_data = self.performance_data.apply(
-            pd.to_numeric, errors="coerce"
-        )
+        row = self.backtest_instance.performance_history.iloc[-1].round(2)
+        data = [{"Metric": metric, "Value": row[metric]} for metric in row.index]
+        return data
 
     def update_graph(
         self, selected_stocks, selected_graphs, selected_indicators, n_intervals
     ):
+
+        if not self.backtest_instance:
+            return go.Figure()
+
+        self.stock_data = self.backtest_instance.data
+        self.action_data = self.backtest_instance.action_history
+        self.additional_data = self.backtest_instance.portfolio_history
+        self.performance_data = self.backtest_instance.performance_history
+
+        current_timestamp = self.performance_data.index[-1]
+
+        # print("current_timestamp", current_timestamp)
+
         if isinstance(selected_stocks, str):
             selected_stocks = [selected_stocks]
 
@@ -309,7 +254,7 @@ class Frontend:
         )
 
         for selected_stock in selected_stocks:
-            df = self.stock_data[selected_stock]
+            df = self.stock_data[selected_stock].iloc[:current_timestamp]
 
             if "line" in selected_graphs:
                 fig.add_scatter(
@@ -336,33 +281,36 @@ class Frontend:
             if "buy/sell" in selected_graphs:
                 actions_df = self.action_data[selected_stock]
 
-                buys = actions_df[actions_df["Action"] == "buy"]
+                # Filter buy actions
+                buys = actions_df[actions_df["Type"] == "buy"]
                 if not buys.empty:
                     fig.add_scatter(
                         x=buys.index,
-                        y=buys["IdPrice"],
+                        y=buys["Price"],  # Changed from IdPrice to Price
                         mode="markers",
                         marker=dict(symbol="triangle-up", size=10, color="green"),
                         name=f"{selected_stock} Buys",
-                        text=[f"Stop Loss: {sl}" for sl in buys["StopLoss"]],
+                        text=[f"Stop Loss: {sl}" for sl in buys["Stop Loss"]],
                         hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>",
                         row=1,
                         col=1,
                     )
 
-                sells = actions_df[actions_df["Action"] == "sell"]
+                # Filter sell actions
+                sells = actions_df[actions_df["Type"] == "sell"]
                 if not sells.empty:
                     fig.add_scatter(
                         x=sells.index,
-                        y=sells["IdPrice"],
+                        y=sells["Price"],  # Changed from IdPrice to Price
                         mode="markers",
                         marker=dict(symbol="triangle-down", size=10, color="red"),
                         name=f"{selected_stock} Sells",
-                        text=[f"Stop Loss: {sl}" for sl in sells["StopLoss"]],
+                        text=[f"Stop Loss: {sl}" for sl in sells["Stop Loss"]],
                         hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>",
                         row=1,
                         col=1,
                     )
+
             if "volume" in selected_graphs:
                 max_volume = df["Volume"].max()
                 colors = [
@@ -392,7 +340,6 @@ class Frontend:
                     if ta_indicator in selected_indicators:
                         if not self.ta_indicator_info[ta_indicator][1]:
                             for col in self.ta_indicator_info[ta_indicator][0]:
-                                # print(ta_indicator,selected_indicators,col)
                                 fig.add_scatter(
                                     x=df.index,
                                     y=df[col],
@@ -401,7 +348,6 @@ class Frontend:
                                     row=1,
                                     col=1,
                                 )
-                            # If it requires a separate graph, add it to row 2 if available
                         else:
                             for col in self.ta_indicator_info[ta_indicator][0]:
                                 fig.add_scatter(
@@ -413,45 +359,45 @@ class Frontend:
                                     col=1,
                                 )
 
-        df_add = self.additional_data
-
-        fig.add_scatter(
-            x=df_add.index,
-            y=df_add["Capital"],
-            mode="lines",
-            name="Capital",
-            row=additional_data_row,
-            col=1,
-        )
-        fig.add_scatter(
-            x=df_add.index,
-            y=df_add["Cash"],
-            mode="lines",
-            name="Cash",
-            row=additional_data_row,
-            col=1,
-        )
-        fig.add_scatter(
-            x=df_add.index,
-            y=df_add["Equity"],
-            mode="lines",
-            name="Equity",
-            row=additional_data_row,
-            col=1,
-        )
-        fig.add_scatter(
-            x=df_add.index,
-            y=df_add["Portfolio Value"],
-            mode="lines",
-            name="Portfolio Value",
-            row=additional_data_row,
-            col=1,
-        )
+        # Add portfolio data from self.additional_data
+        if not self.additional_data.empty:
+            fig.add_scatter(
+                x=self.additional_data.index,
+                y=self.additional_data["Capital"],
+                mode="lines",
+                name="Capital",
+                row=additional_data_row,
+                col=1,
+            )
+            fig.add_scatter(
+                x=self.additional_data.index,
+                y=self.additional_data["Cash"],
+                mode="lines",
+                name="Cash",
+                row=additional_data_row,
+                col=1,
+            )
+            fig.add_scatter(
+                x=self.additional_data.index,
+                y=self.additional_data["Equity"],
+                mode="lines",
+                name="Equity",
+                row=additional_data_row,
+                col=1,
+            )
+            fig.add_scatter(
+                x=self.additional_data.index,
+                y=self.additional_data["Portfolio Value"],
+                mode="lines",
+                name="Portfolio Value",
+                row=additional_data_row,
+                col=1,
+            )
 
         fig.update_yaxes(title_text="Price", secondary_y=False)
 
         fig.update_layout(
-            xaxis_rangeslider_visible=False,  # Hide the rangeslider if you don't want it
+            xaxis_rangeslider_visible=False,
             legend=dict(
                 itemclick=False,
                 itemdoubleclick=False,
@@ -465,10 +411,3 @@ class Frontend:
         )
 
         return fig
-
-    def update_table(self, n_intervals):
-
-        row = self.performance_data.iloc[-1].round(2)
-        print(row.dtypes, row.dtype)
-        data = [{"Metric": metric, "Value": row[metric]} for metric in row.index]
-        return data
