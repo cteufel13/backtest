@@ -68,12 +68,17 @@ class DataRetriever:
             ticker_data = self.get_ticker_data(ticker)
             data[ticker] = ticker_data
 
+        latest_start = max(df.index[0] for df in data.values())
+        aligned_data = {
+            ticker: df[df.index >= latest_start] for ticker, df in data.items()
+        }
+
         # if risk_free_rate:
         #     data["RFRate"] = self.get_risk_free(
         #         ticker_index=data[ticker].index, rate_column="DTB3"
         #     )
 
-        return data
+        return aligned_data
 
     def get_sector_tickers(self, sector):
 
