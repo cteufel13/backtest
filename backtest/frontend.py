@@ -11,6 +11,9 @@ import time
 
 
 class Frontend:
+    """
+    Uses a Dash Server to visualize the backtest results in real-time.
+    """
 
     def __init__(self, backtest_instance=None):
         self.backtest_instance = backtest_instance
@@ -23,6 +26,9 @@ class Frontend:
         self._setup_callbacks()
 
     def _setup_callbacks(self):
+        """
+        Initializes callback functions to update visualization based on user input.
+        """
 
         self.app.callback(
             Output("main-graph", "figure"),
@@ -51,6 +57,9 @@ class Frontend:
         )(self.update_table)
 
     def _setup_layout(self):
+        """
+        Initializes the HTML layout of the Dash Server
+        """
 
         layout = html.Div(
             [
@@ -194,6 +203,11 @@ class Frontend:
         ] + [{"label": "None", "value": None}]
 
     def update_table(self, n_intervals):
+        """
+        Update the performance table with the latest performance metrics.
+        This callback is triggered on every interval update.
+        """
+
         if (
             not self.backtest_instance
             or self.backtest_instance.performance_history.empty
@@ -207,6 +221,11 @@ class Frontend:
     def update_graph(
         self, selected_stocks, selected_graphs, selected_indicators, n_intervals
     ):
+        """
+        Update the main graph based on user input.
+        This callback is triggered on every interval update
+        and whenever the user changes the dropdown values.
+        """
 
         if not self.backtest_instance:
             return go.Figure()
@@ -218,11 +237,10 @@ class Frontend:
 
         current_timestamp = self.performance_data.index[-1]
 
-        # print("current_timestamp", current_timestamp)
-
         if isinstance(selected_stocks, str):
             selected_stocks = [selected_stocks]
 
+        # Check if indicators need extra graph
         indicators_with_exgraph = False
         if selected_indicators is not None:
             for ta_indicator in self.ta_indicator_info.keys():
@@ -233,26 +251,56 @@ class Frontend:
                     indicators_with_exgraph = True
                     break
 
-        additional_data_row = 3 if indicators_with_exgraph else 2
-
+        # Adjust rows based on indicators and add new trade activity row
         if indicators_with_exgraph:
-            num_rows = 3
-            row_heights = [0.6, 0.2, 0.2]
-            specs = [[{"secondary_y": True}], [{}], [{}]]
+            num_rows = 4  # Add 1 for trade activity
+            row_heights = [0.1, 0.6, 0.15, 0.15]  # Small row at top for trade activity
+            specs = [[{}], [{"secondary_y": True}], [{}], [{}]]
         else:
-            num_rows = 2
-            row_heights = [0.7, 0.3]
-            specs = [[{"secondary_y": True}], [{}]]
+            num_rows = 3  # Add 1 for trade activity
+            row_heights = [0.1, 0.65, 0.25]  # Small row at top for trade activity
+            specs = [[{}], [{"secondary_y": True}], [{}]]
 
         fig = make_subplots(
             rows=num_rows,
             cols=1,
             shared_xaxes=True,
-            vertical_spacing=0.03,
+            vertical_spacing=0.02,
             row_heights=row_heights,
             specs=specs,
         )
 
+        for selected_stock in selected_stocks:
+            df_buys = self.action_data[
+                (self.action_data["Ticker"] == selected_stock)
+                & (self.action_data["Type"] == "buy")
+            ]
+            df_sells = self.action_data[
+                (self.action_data["Ticker"] == selected_stock)
+                & (self.action_data["Type"] == "sell")
+            ]
+
+            fig.add_bar(
+                x=df_buys["Date"],
+                y=df_buys["Amount"],
+                name="Buys",
+                marker_color="green",
+                row=1,
+                col=1,
+                width=864000000,
+            )
+
+            fig.add_bar(
+                x=df_sells["Date"],
+                y=df_sells["Amount"],
+                name="Sells",
+                marker_color="red",
+                row=1,
+                col=1,
+                width=864000000,
+            )
+
+        # Adjust main price chart to start from row 2
         for selected_stock in selected_stocks:
             df = self.stock_data[selected_stock].iloc[:current_timestamp]
 
@@ -262,7 +310,7 @@ class Frontend:
                     y=df["Close"],
                     mode="lines",
                     name=f"{selected_stock} (Close)",
-                    row=1,
+                    row=2,  # Updated row
                     col=1,
                 )
 
@@ -274,25 +322,27 @@ class Frontend:
                     low=df["Low"],
                     close=df["Close"],
                     name=f"{selected_stock} (Candlestick)",
-                    row=1,
+                    row=2,  # Updated row
                     col=1,
                 )
 
             if "buy/sell" in selected_graphs:
-                actions_df = self.action_data[selected_stock]
+                actions_df = self.action_data[
+                    self.action_data["Ticker"] == selected_stock
+                ]
 
                 # Filter buy actions
                 buys = actions_df[actions_df["Type"] == "buy"]
                 if not buys.empty:
                     fig.add_scatter(
-                        x=buys.index,
-                        y=buys["Price"],  # Changed from IdPrice to Price
+                        x=buys["Date"],
+                        y=buys["Price"],
                         mode="markers",
                         marker=dict(symbol="triangle-up", size=10, color="green"),
                         name=f"{selected_stock} Buys",
                         text=[f"Stop Loss: {sl}" for sl in buys["Stop Loss"]],
                         hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>",
-                        row=1,
+                        row=2,  # Updated row
                         col=1,
                     )
 
@@ -300,14 +350,14 @@ class Frontend:
                 sells = actions_df[actions_df["Type"] == "sell"]
                 if not sells.empty:
                     fig.add_scatter(
-                        x=sells.index,
-                        y=sells["Price"],  # Changed from IdPrice to Price
+                        x=sells["Date"],
+                        y=sells["Price"],
                         mode="markers",
                         marker=dict(symbol="triangle-down", size=10, color="red"),
                         name=f"{selected_stock} Sells",
                         text=[f"Stop Loss: {sl}" for sl in sells["Stop Loss"]],
                         hovertemplate="%{x}<br>Price: %{y}<br>%{text}<extra></extra>",
-                        row=1,
+                        row=2,  # Updated row
                         col=1,
                     )
 
@@ -323,7 +373,7 @@ class Frontend:
                     name=f"{selected_stock} Volume",
                     opacity=0.9,
                     marker_color=colors,
-                    row=1,
+                    row=2,  # Updated row
                     col=1,
                     secondary_y=True,
                 )
@@ -333,6 +383,7 @@ class Frontend:
                     showgrid=False,
                     rangemode="tozero",
                     range=[0, max_volume * 3],
+                    row=2,  # Updated row
                 )
 
             if selected_indicators is not None:
@@ -345,7 +396,7 @@ class Frontend:
                                     y=df[col],
                                     mode="lines",
                                     name=f"{ta_indicator}",
-                                    row=1,
+                                    row=2,  # Updated row
                                     col=1,
                                 )
                         else:
@@ -355,9 +406,12 @@ class Frontend:
                                     y=df[col],
                                     mode="lines",
                                     name=f"{ta_indicator}",
-                                    row=2,
+                                    row=3,  # Updated row
                                     col=1,
                                 )
+
+        # Determine the row for additional portfolio data
+        additional_data_row = 4 if indicators_with_exgraph else 3
 
         # Add portfolio data from self.additional_data
         if not self.additional_data.empty:
@@ -394,8 +448,25 @@ class Frontend:
                 col=1,
             )
 
-        fig.update_yaxes(title_text="Price", secondary_y=False)
+        # Update axis titles
+        fig.update_yaxes(title_text="Price", secondary_y=False, row=2, col=1)
+        fig.update_yaxes(
+            title_text="Trade Count",
+            row=1,
+            col=1,
+            rangemode="tozero",
+            showgrid=True,
+        )
 
+        # Style the trade activity graph
+        fig.update_xaxes(
+            showgrid=False,
+            showticklabels=False,
+            row=1,
+            col=1,
+        )
+
+        # Update layout
         fig.update_layout(
             xaxis_rangeslider_visible=False,
             legend=dict(
@@ -406,8 +477,24 @@ class Frontend:
                 xanchor="left",
                 yanchor="top",
             ),
-            height=800,
+            height=900,  # Increased height to accommodate new graph
             margin=dict(t=50),
+            hovermode="x unified",
+            barmode="overlay",  # Overlay bars for buy/sell visualization
+            uirevision="constant",
+        )
+
+        # Add title for trade activity section
+        fig.add_annotation(
+            text="Trade Activity",
+            xref="paper",
+            yref="paper",
+            x=0,
+            y=1,
+            xanchor="left",
+            yanchor="bottom",
+            showarrow=False,
+            font=dict(size=12),
         )
 
         return fig

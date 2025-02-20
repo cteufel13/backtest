@@ -3,9 +3,6 @@ from backtest.core.indicator_base import Indicator, check_valid_data
 import plotly.graph_objects as go
 import plotly.express as px
 
-"""
-preset implementation for technical indicators as provided by pandas_ta
-"""
 
 __all__ = ["SMA20"]
 

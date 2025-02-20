@@ -2,6 +2,7 @@ import numpy as np
 
 
 class Position:
+    """Position Class that deals with the position that the trader is currently in"""
 
     def __init__(self, size, entry_price, stop_loss):
         self.size = size

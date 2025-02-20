@@ -17,6 +17,8 @@ import numpy as np
 from typing import Union, List
 import webbrowser
 
+from tqdm import tqdm
+
 
 class Backtest:
     def __init__(
@@ -68,6 +70,8 @@ class Backtest:
         self.ta_indicators = [cls() for cls in Indicator.__subclasses__()]
 
     def execute_order(self, order_type, price, amount, ticker):
+        """Executes an order and updates the portfolio accordingly."""
+
         slippage_adjustment = price * self.slippage
         if order_type == "buy":
             price += slippage_adjustment  # Apply slippage to buy price
@@ -98,8 +102,13 @@ class Backtest:
                 )
 
     def run_backtest(
-        self, strategy: Strategy, tickers: Union[str, List[str]], sector: str = None
+        self,
+        strategy: Strategy,
+        tickers: Union[str, List[str]],
+        sector: str = None,
+        fast=True,
     ):
+        """Runs the backtest with the given strategy and tickers."""
 
         all_dates = self.data[tickers[0]].index
 
@@ -190,8 +199,8 @@ class Backtest:
                 [self.performance_history, pd.DataFrame([metrics_entry])],
                 ignore_index=True,
             )
-
-            time.sleep(0.5)
+            if not fast:
+                time.sleep(0.5)
 
     def get_data(self):
         self.data = self.datatretriever.get_data(self.tickers)
@@ -199,12 +208,20 @@ class Backtest:
         return self.data
 
     def apply_ta_indicators(self):
+        """
+        Applies the technical Indicators as found in utils/inidcators.py to the data.
+        """
+
         for indicator in self.ta_indicators:
             for ticker in self.tickers:
                 self.data[ticker] = indicator.apply(self.data[ticker])
         return self.data
 
     def get_tickers(self, tickers=Union[str, List[str]], sector: str = None):
+        """
+        Sets the tickers attribute based on the given tickers or sector. If none are taking the SP500 is used. (^GSPC)
+        """
+
         if sector is not None:
             self.tickers = self.datatretriever.get_sector_tickers(sector)
         elif tickers is not None and isinstance(tickers, str):
@@ -214,7 +231,7 @@ class Backtest:
         else:
             ["^GSPC"]
 
-    def run(self, strategy, tickers, sector=None, start_visualizer=True):
+    def run(self, strategy, tickers, sector=None, start_visualizer=True, fast=True):
         """Runs the backtest and starts the frontend visualization."""
 
         self.get_tickers(tickers=tickers, sector=sector)
@@ -240,7 +257,7 @@ class Backtest:
 
             # Start backtest in a separate thread
             backtest_thread = threading.Thread(
-                target=self.run_backtest, args=(strategy, tickers, sector)
+                target=self.run_backtest, args=(strategy, tickers, sector, fast)
             )
             backtest_thread.daemon = True
             backtest_thread.start()
@@ -249,7 +266,8 @@ class Backtest:
             self.visualizer.run()
 
         else:
-            self.run_backtest(strategy, tickers, sector)
+            print("Starting backtest...")
+            self.run_backtest(strategy, tickers, sector, fast)
 
             print("Backtest completed.")
 
